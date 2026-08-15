@@ -47,12 +47,14 @@ struct FileIcon: View {
 
 struct FileRow: View {
     let item: FileItem
+    var selecting = false
 
     var body: some View {
         HStack(spacing: 10) {
             if item.isImage {
-                RemoteThumbnail(file: item, width: 88, height: 88, corner: 6)
+                RemoteThumbnail(file: item, width: 132, height: 132, corner: 6)
                     .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 FileIcon(item: item)
             }
@@ -72,13 +74,45 @@ struct FileRow: View {
                     .font(.caption)
                     .foregroundStyle(.yellow)
             }
-            if item.isDirectory {
+            HStack(spacing: 3) {
+                ForEach(item.tagList.prefix(4)) { tag in
+                    Circle()
+                        .fill(tag.swatch)
+                        .frame(width: 7, height: 7)
+                }
+            }
+            if item.isDirectory && !selecting {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color(.tertiaryLabel))
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Badge de sélection multiple
+
+struct SelectionBadge: View {
+    let isOn: Bool
+
+    var body: some View {
+        ZStack {
+            if isOn {
+                Circle()
+                    .fill(Color.accentColor)
+                    .overlay(
+                        Image(systemName: "checkmark")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.white)
+                    )
+            } else {
+                Circle()
+                    .strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
+            }
+        }
+        .frame(width: 22, height: 22)
+        .background(Circle().fill(Color(.systemBackground).opacity(0.85)))
     }
 }
 
@@ -90,16 +124,13 @@ struct FileGridCell: View {
     var body: some View {
         VStack(spacing: 5) {
             ZStack {
-                Group {
-                    if item.isMedia {
-                        RemoteThumbnail(file: item, width: 300, height: 300, corner: 8)
-                    } else {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray5))
-                            .overlay(FileIcon(item: item, size: 30))
-                    }
+                if item.isMedia {
+                    RemoteThumbnail(file: item, width: 600, height: 600, corner: 8)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(.systemGray5))
+                        .overlay(FileIcon(item: item, size: 30))
                 }
-                .aspectRatio(1, contentMode: .fit)
                 if item.isVideo {
                     Image(systemName: "play.circle.fill")
                         .font(.title2)
@@ -107,11 +138,15 @@ struct FileGridCell: View {
                         .shadow(radius: 3)
                 }
             }
+            .aspectRatio(1, contentMode: .fit)
+            // Hauteur de texte fixe : toutes les cartes ont exactement la
+            // même taille, quel que soit le nom du fichier.
             Text(item.name)
                 .font(.caption)
                 .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(height: 16, alignment: .top)
         }
     }
 }

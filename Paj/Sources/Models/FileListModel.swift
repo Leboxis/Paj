@@ -7,6 +7,7 @@ import Foundation
 final class FileListModel: ObservableObject {
     @Published var items: [FileItem] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var isBatching = false
     @Published var errorMessage: String?
 
     private var cursor: String?
@@ -93,5 +94,36 @@ final class FileListModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: - Actions par lot
+
+    /// Applique une opération à plusieurs éléments en parallèle, compte les
+    /// échecs puis resynchronise la liste depuis le serveur.
+    func performBatch(_ items: [FileItem], label: String,
+                      operation: @escaping (FileItem) async throws -> Void) async {
+        guard !items.isEmpty else { return }
+        isBatching = true
+        var failures = 0
+        await withTaskGroup(of: Bool.self) { group in
+            for item in items {
+                group.addTask {
+                    do {
+                        try await operation(item)
+                        return true
+                    } catch {
+                        return false
+                    }
+                }
+            }
+            for await ok in group where !ok {
+                failures += 1
+            }
+        }
+        isBatching = false
+        if failures > 0 {
+            errorMessage = "\(failures) échec(s) sur \(items.count) — \(label)."
+        }
+        await refresh()
     }
 }

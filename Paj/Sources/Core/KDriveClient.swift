@@ -76,12 +76,16 @@ final class KDriveClient {
 
     // MARK: - Lecture
 
-    func listDirectory(id: Int, cursor: String?, orderBy: String, order: String) async throws -> Page<FileItem> {
-        try await get("3/drive/\(AppConfig.driveId)/files/\(id)/files", query: Self.paginationQuery(cursor: cursor, extra: [
+    func listDirectory(id: Int, cursor: String?, orderBy: String, order: String, directoriesOnly: Bool = false) async throws -> Page<FileItem> {
+        var extra = [
             URLQueryItem(name: "limit", value: "100"),
             URLQueryItem(name: "order_by", value: orderBy),
             URLQueryItem(name: "order", value: order)
-        ]))
+        ]
+        if directoriesOnly {
+            extra.append(URLQueryItem(name: "type", value: "dir"))
+        }
+        return try await get("3/drive/\(AppConfig.driveId)/files/\(id)/files", query: Self.paginationQuery(cursor: cursor, extra: extra))
     }
 
     func recents(cursor: String?) async throws -> Page<FileItem> {
@@ -138,6 +142,46 @@ final class KDriveClient {
         var req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(item.id)")
         req.httpMethod = "DELETE"
         _ = try await perform(req)
+    }
+
+    func move(_ item: FileItem, to directoryId: Int) async throws {
+        _ = try await performJSON("3/drive/\(AppConfig.driveId)/files/\(item.id)/move/\(directoryId)",
+                                  method: "POST",
+                                  body: ["conflict": "rename"])
+    }
+
+    // MARK: - Tags (catégories)
+
+    func listCategories() async throws -> [KCategory] {
+        struct Resp: Decodable { let data: [KCategory]? }
+        let resp: Resp = try await get("2/drive/\(AppConfig.driveId)/categories")
+        return resp.data ?? []
+    }
+
+    func createCategory(name: String, color: String) async throws -> KCategory {
+        struct Resp: Decodable { let data: KCategory? }
+        let data = try await performJSON("2/drive/\(AppConfig.driveId)/categories",
+                                         method: "POST",
+                                         body: ["name": name, "color": color])
+        guard let category = (try? JSONDecoder().decode(Resp.self, from: data))?.data else {
+            throw KDriveError.decoding
+        }
+        return category
+    }
+
+    /// Applique (ou retire) un tag sur plusieurs fichiers en un seul appel.
+    func setCategory(fileIds: [Int], categoryId: Int, assign: Bool) async throws {
+        _ = try await performJSON("2/drive/\(AppConfig.driveId)/files/categories/\(categoryId)",
+                                  method: assign ? "POST" : "DELETE",
+                                  body: ["file_ids": fileIds])
+    }
+
+    private func performJSON(_ path: String, method: String, body: [String: Any]) async throws -> Data {
+        var req = try request(path: path)
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await perform(req)
     }
 
     // MARK: - Médias

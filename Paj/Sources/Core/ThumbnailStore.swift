@@ -96,25 +96,28 @@ struct RemoteThumbnail: View {
     @State private var image: UIImage?
 
     var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color(.systemGray5))
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: file.isVideo ? "video" : "photo")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+        // Rectangle définit la taille (contraint par le parent) : l'image en
+        // overlay remplit et est rognée — taille identique quel que soit le
+        // ratio d'origine (photo portrait, vidéo horizontale…).
+        Rectangle()
+            .fill(Color(.systemGray5))
+            .overlay {
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: file.isVideo ? "video" : "photo")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: corner))
-        .task(id: file.id) {
-            let key = "t_\(file.id)_\(width)x\(height)"
-            image = await ThumbnailStore.shared.image(forKey: key) {
-                try await KDriveClient.shared.thumbnailData(fileId: file.id, width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: corner))
+            .task(id: file.id) {
+                let key = "t_\(file.id)_\(width)x\(height)"
+                image = await ThumbnailStore.shared.image(forKey: key) {
+                    try await KDriveClient.shared.thumbnailData(fileId: file.id, width: width, height: height)
+                }
             }
-        }
     }
 }

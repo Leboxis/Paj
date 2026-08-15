@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Contenu d'onglet générique : liste ou grille (bascule en toolbar), tri
-/// serveur, pagination par curseur, visionneuse plein écran pour les médias,
-/// actions par menu contextuel. Réutilisé par Parcourir, Récents et Favoris.
+/// serveur, pagination par curseur, sélection multiple avec barre d'actions
+/// (favori, déplacer, tags, renommer, supprimer), visionneuse plein écran.
+/// Réutilisé par Parcourir, Récents et Favoris.
 struct FileListView: View {
     @ObservedObject var model: FileListModel
     var sortable = true
@@ -13,12 +14,17 @@ struct FileListView: View {
     @AppStorage private var sortField: String
     @AppStorage private var sortAscending: Bool
 
+    @StateObject private var selection = SelectionState()
+
     @State private var viewerShown = false
     @State private var viewerIndex = 0
     @State private var infoItem: FileItem?
     @State private var renamingItem: FileItem?
     @State private var newName = ""
     @State private var deletingItem: FileItem?
+    @State private var confirmingDeleteSelection = false
+    @State private var moveTargets: [FileItem] = []
+    @State private var tagItems: [FileItem] = []
 
     init(model: FileListModel,
          storageKey: String,
@@ -34,10 +40,20 @@ struct FileListView: View {
         _sortAscending = AppStorage(wrappedValue: true, storageKey + ".sortAscending")
     }
 
+    private var selectedItems: [FileItem] {
+        model.items.filter { selection.ids.contains($0.id) }
+    }
+
+    private var allSelected: Bool {
+        !model.items.isEmpty && model.items.allSatisfy { selection.ids.contains($0.id) }
+    }
+
     var body: some View {
         listContent
             .toolbar { toolbarContent }
-            .refreshable { await model.refresh() }
+            .refreshable {
+                if !selection.isActive { await model.refresh() }
+            }
             .task { await model.loadFirstPageIfNeeded() }
             .onChange(of: sortField) { _, _ in reloadForSort() }
             .onChange(of: sortAscending) { _, _ in reloadForSort() }
@@ -45,6 +61,25 @@ struct FileListView: View {
                 MediaViewerView(items: model.items.filter { $0.isMedia }, index: $viewerIndex)
             }
             .sheet(item: $infoItem) { FileInfoSheet(item: $0) }
+            .sheet(isPresented: Binding(get: { !moveTargets.isEmpty },
+                                        set: { if !$0 { moveTargets = [] } })) {
+                DirectoryPickerView { destination in
+                    let targets = moveTargets
+                    selection.end()
+                    Task {
+                        await model.performBatch(targets, label: "déplacement") {
+                            try await KDriveClient.shared.move($0, to: destination)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: Binding(get: { !tagItems.isEmpty },
+                                        set: { if !$0 { tagItems = [] } })) {
+                TagsSheet(items: tagItems) {
+                    selection.end()
+                    Task { await model.refresh() }
+                }
+            }
             .alert("Renommer", isPresented: Binding(get: { renamingItem != nil },
                                                     set: { if !$0 { renamingItem = nil } })) {
                 TextField("Nouveau nom", text: $newName)
@@ -52,6 +87,7 @@ struct FileListView: View {
                 Button("Enregistrer") {
                     if let item = renamingItem, !newName.isEmpty {
                         let name = newName
+                        selection.end()
                         Task { await model.rename(item, to: name) }
                     }
                 }
@@ -70,6 +106,13 @@ struct FileListView: View {
             } message: {
                 Text("L'élément sera déplacé dans la corbeille du drive.")
             }
+            .alert("Supprimer \(selection.count) élément(s) ?",
+                   isPresented: $confirmingDeleteSelection) {
+                Button("Supprimer", role: .destructive) { deleteSelection() }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Les éléments seront déplacés dans la corbeille du drive.")
+            }
             .alert("Erreur", isPresented: Binding(get: { model.errorMessage != nil },
                                                   set: { if !$0 { model.errorMessage = nil } })) {
                 Button("OK", role: .cancel) {}
@@ -82,8 +125,16 @@ struct FileListView: View {
                 }
             }
             .overlay {
-                if model.items.isEmpty && !model.isLoading && model.errorMessage == nil {
+                if model.items.isEmpty && !model.isLoading && model.errorMessage == nil && !selection.isActive {
                     ContentUnavailableView("Vide", systemImage: "tray")
+                }
+            }
+            .overlay {
+                if model.isBatching {
+                    ZStack {
+                        Color(.systemBackground).opacity(0.6).ignoresSafeArea()
+                        ProgressView("Opération en cours…")
+                    }
                 }
             }
     }
@@ -96,15 +147,37 @@ struct FileListView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) { gridView.toggle() }
-            } label: {
-                Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
+        if selection.isActive {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(allSelected ? "Aucun" : "Tout") {
+                    if allSelected {
+                        selection.clear()
+                    } else {
+                        selection.selectAll(model.items)
+                    }
+                }
             }
-            .accessibilityLabel(gridView ? "Vue liste" : "Vue grille")
         }
-        if sortable {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button(selection.isActive ? "Terminer" : "Sélectionner") {
+                if selection.isActive {
+                    selection.end()
+                } else {
+                    selection.start()
+                }
+            }
+        }
+        if !selection.isActive {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { gridView.toggle() }
+                } label: {
+                    Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
+                }
+                .accessibilityLabel(gridView ? "Vue liste" : "Vue grille")
+            }
+        }
+        if !selection.isActive && sortable {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Picker("Trier par", selection: $sortField) {
@@ -118,6 +191,24 @@ struct FileListView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.up.arrow.down")
+                }
+            }
+        }
+        if selection.isActive {
+            ToolbarItem(placement: .bottomBar) {
+                HStack {
+                    Text("\(selection.count) sélectionné\(selection.count == 1 ? "" : "s")")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    SelectionActionsView(
+                        selection: selection,
+                        onFavorite: favoriteSelection,
+                        onMove: { moveTargets = selectedItems },
+                        onTags: { tagItems = selectedItems },
+                        onRename: selection.count == 1 ? renameSelection : nil,
+                        onDelete: { confirmingDeleteSelection = true }
+                    )
                 }
             }
         }
@@ -166,23 +257,54 @@ struct FileListView: View {
 
     private func row(_ item: FileItem) -> some View {
         Button {
-            open(item)
+            if selection.isActive {
+                selection.toggle(item)
+            } else {
+                open(item)
+            }
         } label: {
-            FileRow(item: item)
+            HStack(spacing: 10) {
+                if selection.isActive {
+                    SelectionBadge(isOn: selection.contains(item))
+                }
+                FileRow(item: item, selecting: selection.isActive)
+            }
         }
         .buttonStyle(.plain)
-        .contextMenu { contextActions(item) }
+        .contextMenu {
+            if !selection.isActive {
+                contextActions(item)
+            }
+        }
         .onAppear { Task { await model.loadMoreIfNeeded(current: item) } }
     }
 
     private func gridCell(_ item: FileItem) -> some View {
         Button {
-            open(item)
+            if selection.isActive {
+                selection.toggle(item)
+            } else {
+                open(item)
+            }
         } label: {
             FileGridCell(item: item)
+                .overlay(alignment: .topLeading) {
+                    if selection.isActive {
+                        SelectionBadge(isOn: selection.contains(item))
+                            .padding(6)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(selection.contains(item) ? Color.accentColor : Color.clear, lineWidth: 3)
+                )
         }
         .buttonStyle(.plain)
-        .contextMenu { contextActions(item) }
+        .contextMenu {
+            if !selection.isActive {
+                contextActions(item)
+            }
+        }
         .onAppear { Task { await model.loadMoreIfNeeded(current: item) } }
     }
 
@@ -216,10 +338,50 @@ struct FileListView: View {
         } label: {
             Label("Renommer", systemImage: "pencil")
         }
+        Button {
+            moveTargets = [item]
+        } label: {
+            Label("Déplacer", systemImage: "folder")
+        }
+        Button {
+            tagItems = [item]
+        } label: {
+            Label("Tags", systemImage: "tag")
+        }
         Button(role: .destructive) {
             deletingItem = item
         } label: {
             Label("Supprimer", systemImage: "trash")
+        }
+    }
+
+    // MARK: - Actions de sélection
+
+    private func favoriteSelection() {
+        let items = selectedItems
+        let makeFavorite = !items.allSatisfy { $0.isFavorite == true }
+        selection.end()
+        Task {
+            await model.performBatch(items, label: "favoris") {
+                try await KDriveClient.shared.setFavorite($0, favorite: makeFavorite)
+            }
+        }
+    }
+
+    private func renameSelection() {
+        guard let item = selectedItems.first else { return }
+        renamingItem = item
+        newName = item.name
+    }
+
+    private func deleteSelection() {
+        let items = selectedItems
+        confirmingDeleteSelection = false
+        selection.end()
+        Task {
+            await model.performBatch(items, label: "suppression") {
+                try await KDriveClient.shared.delete($0)
+            }
         }
     }
 }

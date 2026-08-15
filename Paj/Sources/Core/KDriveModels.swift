@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Élément du drive (fichier ou dossier) — champs du schéma FileV3/DirectoryV3
 /// réellement utilisés par l'app.
@@ -13,8 +14,18 @@ struct FileItem: Identifiable, Hashable, Codable {
     let lastModifiedAt: Int?
     let addedAt: Int?
     var isFavorite: Bool?
+    var categories: [FileCategoryLink]?
 
     var isDirectory: Bool { type == "directory" }
+
+    /// Tags appliqués au fichier (avec nom et couleur).
+    var tagList: [KCategory] {
+        (categories ?? []).compactMap(\.category)
+    }
+
+    var categoryIDs: Set<Int> {
+        Set((categories ?? []).map(\.categoryId))
+    }
 
     var isImage: Bool { mimeType?.hasPrefix("image/") ?? false }
     var isVideo: Bool { mimeType?.hasPrefix("video/") ?? false }
@@ -38,7 +49,8 @@ struct FileItem: Identifiable, Hashable, Codable {
                  createdAt: nil,
                  lastModifiedAt: nil,
                  addedAt: nil,
-                 isFavorite: nil)
+                 isFavorite: nil,
+                 categories: nil)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -49,6 +61,7 @@ struct FileItem: Identifiable, Hashable, Codable {
         case lastModifiedAt = "last_modified_at"
         case addedAt = "added_at"
         case isFavorite = "is_favorite"
+        case categories
     }
 }
 
@@ -102,5 +115,41 @@ enum SortField: String, CaseIterable, Identifiable {
         case .size: return "Taille"
         case .type: return "Type"
         }
+    }
+}
+
+// MARK: - Tags (catégories kdrive)
+
+/// Tag kdrive (« catégorie » du drive).
+struct KCategory: Identifiable, Codable, Hashable {
+    let id: Int
+    let name: String
+    let color: String?
+
+    var swatch: Color { Color(hex: color) ?? Color(.systemGray) }
+}
+
+/// Lien fichier ↔ catégorie tel que renvoyé dans FileV3.categories.
+struct FileCategoryLink: Codable, Hashable {
+    let categoryId: Int
+    let category: KCategory?
+
+    enum CodingKeys: String, CodingKey {
+        case categoryId = "category_id"
+        case category
+    }
+}
+
+extension Color {
+    /// Couleur depuis une chaîne hexadécimale « #RRGGBB » (format kdrive).
+    init?(hex: String?) {
+        guard let hex else { return nil }
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(.sRGB,
+                  red: Double((v >> 16) & 0xFF) / 255.0,
+                  green: Double((v >> 8) & 0xFF) / 255.0,
+                  blue: Double(v & 0xFF) / 255.0)
     }
 }
