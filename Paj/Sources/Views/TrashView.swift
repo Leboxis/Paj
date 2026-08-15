@@ -1,15 +1,8 @@
 import SwiftUI
 
-/// Onglet Corbeille (barre d'onglets) : empile TrashScreen dans sa propre
-/// NavigationStack.
-struct TrashView: View {
-    var body: some View {
-        NavigationStack { TrashScreen() }
-    }
-}
-
 /// Contenu Corbeille : éléments supprimés du drive, restauration ou
-/// suppression définitive, vue grille ou liste. Poussable depuis le Profil.
+/// suppression définitive, vue grille ou liste. Accessible depuis la
+/// section Corbeille du Profil.
 struct TrashScreen: View {
     @StateObject private var model = FileListModel { cursor in
         try await KDriveClient.shared.trash(cursor: cursor)

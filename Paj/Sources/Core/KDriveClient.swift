@@ -192,6 +192,28 @@ final class KDriveClient {
         return try await perform(req)
     }
 
+    // MARK: - Fichiers texte
+
+    /// Contenu brut d'un fichier (téléchargement direct).
+    func downloadData(fileId: Int) async throws -> Data {
+        let req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(fileId)/download")
+        return try await perform(req)
+    }
+
+    /// Enregistre le nouveau contenu d'un fichier existant :
+    /// upload avec file_id = nouvelle version côté kdrive
+    /// (validé en direct : ni conflict ni directory_id dans ce mode).
+    func saveFileContent(_ item: FileItem, data: Data) async throws {
+        var req = try request(path: "3/drive/\(AppConfig.driveId)/upload", query: [
+            URLQueryItem(name: "file_id", value: String(item.id)),
+            URLQueryItem(name: "total_size", value: String(data.count))
+        ])
+        req.httpMethod = "POST"
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        _ = try await perform(req)
+    }
+
     // MARK: - Corbeille
 
     func trash(cursor: String?) async throws -> Page<FileItem> {

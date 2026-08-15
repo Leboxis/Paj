@@ -21,18 +21,16 @@ struct RootView: View {
 struct MainTabView: View {
     var body: some View {
         TabView {
-            FavoritesView()
-                .tabItem { Label("Favoris", systemImage: "star") }
-            TagsView()
-                .tabItem { Label("Tags", systemImage: "tag") }
-            BrowseView()
-                .tabItem { Label("Accueil", systemImage: "house") }
-            TrashView()
-                .tabItem { Label("Corbeille", systemImage: "trash") }
             SettingsView()
-                .tabItem { Label("Réglages", systemImage: "gearshape") }
+                .tabItem { Label("Réglages", image: "tab-settings") }
+            TagsView()
+                .tabItem { Label("Tags", image: "tab-tags") }
+            BrowseView()
+                .tabItem { Label("Accueil", image: "tab-home") }
+            FavoritesView()
+                .tabItem { Label("Favoris", image: "tab-favorites") }
             ProfileView()
-                .tabItem { Label("Profil", systemImage: "person.crop.circle") }
+                .tabItem { Label("Profil", image: "tab-profile") }
         }
         .task { await CategoryStore.shared.loadIfNeeded() }
     }

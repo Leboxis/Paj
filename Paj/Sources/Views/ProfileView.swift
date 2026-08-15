@@ -177,6 +177,7 @@ struct PagedFilesView: View {
     @State private var viewerShown = false
     @State private var viewerIndex = 0
     @State private var infoItem: FileItem?
+    @State private var textItem: FileItem?
 
     var body: some View {
         ScrollView {
@@ -207,6 +208,7 @@ struct PagedFilesView: View {
             MediaViewerView(items: items.filter { $0.isMedia }, index: $viewerIndex)
         }
         .sheet(item: $infoItem) { FileInfoSheet(item: $0) }
+        .sheet(item: $textItem) { TextFileView(item: $0) }
         .alert("Erreur", isPresented: Binding(get: { errorMessage != nil },
                                               set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -245,6 +247,8 @@ struct PagedFilesView: View {
                 let media = items.filter { $0.isMedia }
                 viewerIndex = media.firstIndex(where: { $0.id == item.id }) ?? 0
                 viewerShown = true
+            } else if item.isTextFile {
+                textItem = item
             } else {
                 infoItem = item
             }

@@ -19,6 +19,7 @@ struct FileListView: View {
     @State private var viewerShown = false
     @State private var viewerIndex = 0
     @State private var infoItem: FileItem?
+    @State private var textItem: FileItem?
     @State private var renamingItem: FileItem?
     @State private var newName = ""
     @State private var deletingItem: FileItem?
@@ -59,6 +60,7 @@ struct FileListView: View {
                 MediaViewerView(items: model.items.filter { $0.isMedia }, index: $viewerIndex)
             }
             .sheet(item: $infoItem) { FileInfoSheet(item: $0) }
+            .sheet(item: $textItem) { TextFileView(item: $0) }
             .sheet(isPresented: Binding(get: { !moveTargets.isEmpty },
                                         set: { if !$0 { moveTargets = [] } })) {
                 DirectoryPickerView { destination in
@@ -317,6 +319,8 @@ struct FileListView: View {
             let media = model.items.filter { $0.isMedia }
             viewerIndex = media.firstIndex(where: { $0.id == item.id }) ?? 0
             viewerShown = true
+        } else if item.isTextFile {
+            textItem = item
         } else {
             infoItem = item
         }

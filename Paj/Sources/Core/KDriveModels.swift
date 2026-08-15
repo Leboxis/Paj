@@ -38,6 +38,13 @@ struct FileItem: Identifiable, Hashable, Codable {
     var isVideo: Bool { mimeType?.hasPrefix("video/") ?? false }
     var isMedia: Bool { isImage || isVideo }
 
+    /// Fichiers texte éditables (.txt, .md, .log ou mime text/*).
+    var isTextFile: Bool {
+        if let m = mimeType, m.hasPrefix("text/") { return true }
+        let ext = (name as NSString).pathExtension.lowercased()
+        return ["txt", "md", "log"].contains(ext)
+    }
+
     var fileDate: Date? {
         if let t = lastModifiedAt { return Date(timeIntervalSince1970: TimeInterval(t)) }
         if let t = addedAt { return Date(timeIntervalSince1970: TimeInterval(t)) }
