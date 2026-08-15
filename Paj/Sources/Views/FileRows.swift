@@ -35,10 +35,18 @@ struct FileIcon: View {
     let item: FileItem
     var size: CGFloat = 26
 
+    /// Couleur réelle du dossier dans kdrive (bleu kdrive par défaut).
+    private var iconColor: Color {
+        if item.isDirectory {
+            return Color(hex: item.color) ?? Color(hex: "#0098FF")!
+        }
+        return Color.secondary
+    }
+
     var body: some View {
         Image(systemName: item.systemImage)
             .font(.system(size: size))
-            .foregroundStyle(item.isDirectory ? Color.accentColor : Color.secondary)
+            .foregroundStyle(iconColor)
             .frame(width: size + 10, height: size + 10)
     }
 }
@@ -72,12 +80,12 @@ struct FileRow: View {
             if item.isFavorite == true {
                 Image(systemName: "star.fill")
                     .font(.caption)
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
             }
             HStack(spacing: 3) {
-                ForEach(item.tagList.prefix(4)) { tag in
+                ForEach(item.tagIDs.prefix(4), id: \.self) { tagID in
                     Circle()
-                        .fill(tag.swatch)
+                        .fill(CategoryStore.shared.color(forCategoryID: tagID))
                         .frame(width: 7, height: 7)
                 }
             }
@@ -139,6 +147,19 @@ struct FileGridCell: View {
                 }
             }
             .aspectRatio(1, contentMode: .fit)
+            .overlay(alignment: .bottomLeading) {
+                if !item.tagIDs.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(item.tagIDs.prefix(3), id: \.self) { tagID in
+                            Circle()
+                                .fill(CategoryStore.shared.color(forCategoryID: tagID))
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().strokeBorder(.white, lineWidth: 1))
+                        }
+                    }
+                    .padding(5)
+                }
+            }
             // Hauteur de texte fixe : toutes les cartes ont exactement la
             // même taille, quel que soit le nom du fichier.
             Text(item.name)

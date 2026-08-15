@@ -80,7 +80,8 @@ final class KDriveClient {
         var extra = [
             URLQueryItem(name: "limit", value: "100"),
             URLQueryItem(name: "order_by", value: orderBy),
-            URLQueryItem(name: "order", value: order)
+            URLQueryItem(name: "order", value: order),
+            URLQueryItem(name: "with", value: "categories")
         ]
         if directoriesOnly {
             extra.append(URLQueryItem(name: "type", value: "dir"))
@@ -92,19 +93,16 @@ final class KDriveClient {
         try await get("3/drive/\(AppConfig.driveId)/files/favorites", query: Self.paginationQuery(cursor: cursor, extra: [
             URLQueryItem(name: "limit", value: "100"),
             URLQueryItem(name: "order_by", value: orderBy),
-            URLQueryItem(name: "order", value: order)
+            URLQueryItem(name: "order", value: order),
+            URLQueryItem(name: "with", value: "categories")
         ]))
     }
 
-    /// Bibliothèque médias : recherche de tous les fichiers image/vidéo du drive,
-    /// triés du plus récemment modifié au plus ancien.
-    /// Sans le paramètre `depth`, l'API effectue une recherche profonde par
-    /// défaut (équivalent de depth=unlimited mais sans le 422).
-    func mediaLibrary(cursor: String?) async throws -> Page<FileItem> {
+    /// Fichiers portant un tag donné (recherche par id de catégorie).
+    func filesInCategory(_ categoryId: Int, cursor: String?) async throws -> Page<FileItem> {
         try await get("3/drive/\(AppConfig.driveId)/files/search", query: Self.paginationQuery(cursor: cursor, extra: [
-            URLQueryItem(name: "types[]", value: "image"),
-            URLQueryItem(name: "types[]", value: "video"),
-            URLQueryItem(name: "directory_id", value: String(AppConfig.rootDirectoryId)),
+            URLQueryItem(name: "category", value: String(categoryId)),
+            URLQueryItem(name: "with", value: "categories"),
             URLQueryItem(name: "order_by", value: "last_modified_at"),
             URLQueryItem(name: "order", value: "desc"),
             URLQueryItem(name: "limit", value: "100")

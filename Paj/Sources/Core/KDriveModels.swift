@@ -15,16 +15,18 @@ struct FileItem: Identifiable, Hashable, Codable {
     let addedAt: Int?
     var isFavorite: Bool?
     var categories: [FileCategoryLink]?
+    var color: String?
 
     var isDirectory: Bool { type == "dir" || type == "directory" }
 
-    /// Tags appliqués au fichier (avec nom et couleur).
-    var tagList: [KCategory] {
-        (categories ?? []).compactMap(\.category)
+    /// IDs des tags appliqués au fichier (l'API liste les ids ; les noms et
+    /// couleurs viennent de CategoryStore).
+    var tagIDs: [Int] {
+        (categories ?? []).map(\.categoryId)
     }
 
     var categoryIDs: Set<Int> {
-        Set((categories ?? []).map(\.categoryId))
+        Set(tagIDs)
     }
 
     var isImage: Bool { mimeType?.hasPrefix("image/") ?? false }
@@ -50,7 +52,8 @@ struct FileItem: Identifiable, Hashable, Codable {
                  lastModifiedAt: nil,
                  addedAt: nil,
                  isFavorite: nil,
-                 categories: nil)
+                 categories: nil,
+                 color: nil)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -62,6 +65,7 @@ struct FileItem: Identifiable, Hashable, Codable {
         case addedAt = "added_at"
         case isFavorite = "is_favorite"
         case categories
+        case color
     }
 }
 

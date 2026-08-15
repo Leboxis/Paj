@@ -23,12 +23,13 @@ struct MainTabView: View {
         TabView {
             BrowseView()
                 .tabItem { Label("Parcourir", systemImage: "folder") }
-            MediaView()
-                .tabItem { Label("Médias", systemImage: "photo.on.rectangle.angled") }
+            TagsView()
+                .tabItem { Label("Tags", systemImage: "tag") }
             FavoritesView()
                 .tabItem { Label("Favoris", systemImage: "star") }
             SettingsView()
                 .tabItem { Label("Réglages", systemImage: "gearshape") }
         }
+        .task { await CategoryStore.shared.loadIfNeeded() }
     }
 }
