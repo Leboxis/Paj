@@ -1,11 +1,11 @@
 import SwiftUI
 
 enum MainTab: String, CaseIterable, Identifiable {
+    case settings
+    case tags
     case home
     case favorites
-    case tags
     case profile
-    case settings
 
     var id: String { rawValue }
 }
@@ -39,6 +39,18 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            SettingsView()
+                .tabItem {
+                    Label("Réglages", systemImage: selectedTab == .settings ? "gearshape.fill" : "gearshape")
+                }
+                .tag(MainTab.settings)
+
+            TagsView()
+                .tabItem {
+                    Label("Tags", systemImage: selectedTab == .tags ? "tag.fill" : "tag")
+                }
+                .tag(MainTab.tags)
+
             BrowseView()
                 .tabItem {
                     Label("Accueil", systemImage: selectedTab == .home ? "house.fill" : "house")
@@ -51,23 +63,11 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.favorites)
 
-            TagsView()
-                .tabItem {
-                    Label("Tags", systemImage: selectedTab == .tags ? "tag.fill" : "tag")
-                }
-                .tag(MainTab.tags)
-
             ProfileView()
                 .tabItem {
                     Label("Profil", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle")
                 }
                 .tag(MainTab.profile)
-
-            SettingsView()
-                .tabItem {
-                    Label("Réglages", systemImage: selectedTab == .settings ? "gearshape.fill" : "gearshape")
-                }
-                .tag(MainTab.settings)
         }
         .tint(.accentColor)
         .onAppear {

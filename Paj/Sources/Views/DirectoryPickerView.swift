@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Sélecteur de dossier de destination pour le déplacement d'éléments :
-/// navigation fluide dans l'arborescence (dossiers uniquement) avec bouton « Déplacer ici ».
+/// navigation dans l'arborescence (dossiers uniquement) avec bouton « Choisir ici ».
 struct DirectoryPickerView: View {
     var excludedIds: Set<Int> = []
     var onPick: (Int) -> Void
@@ -53,50 +53,43 @@ private struct PickerDirectoryList: View {
         self.onPick = onPick
         self.onCancel = onCancel
         let dirId = directory.id
-        _model = StateObject(wrappedValue: FileListModel { cursor in
+        let initialModel = FileListModel { cursor in
             try await KDriveClient.shared.listDirectory(
                 id: dirId,
                 cursor: cursor,
                 orderBy: "name",
-                order: "asc",
-                directoriesOnly: true
+                order: "asc"
             )
-        })
+        }
+        initialModel.setLoaderAndReload({ cursor in
+            try await KDriveClient.shared.listDirectory(
+                id: dirId,
+                cursor: cursor,
+                orderBy: "name",
+                order: "asc"
+            )
+        }, filter: { $0.isDirectory })
+        _model = StateObject(wrappedValue: initialModel)
     }
 
     var body: some View {
         List {
-            Section {
-                Button {
-                    onPick(directory.id)
-                } label: {
-                    HStack {
-                        Image(systemName: "folder.badge.gearshape")
-                            .foregroundStyle(Color.accentColor)
-                            .font(.title3)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Déplacer dans ce dossier")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
-                            Text("Dossier actuel : « \(directory.name) »")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-
-            Section("Sous-dossiers") {
-                if model.items.isEmpty && !model.isLoading {
-                    Text("Aucun sous-dossier")
-                        .font(.footnote)
+            if model.items.isEmpty && !model.isLoading {
+                VStack(spacing: 12) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 40))
                         .foregroundStyle(.secondary)
+                    Text("Aucun sous-dossier")
+                        .font(.headline)
+                    Text("Appuyez sur « Choisir ici » en haut à droite pour déplacer dans « \(directory.name) ».")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+                .listRowBackground(Color.clear)
+            } else {
                 ForEach(model.items) { item in
                     let isExcluded = excludedIds.contains(item.id)
                     Button {
@@ -104,28 +97,41 @@ private struct PickerDirectoryList: View {
                             path.append(item)
                         }
                     } label: {
-                        HStack {
-                            FileRow(item: item)
-                                .opacity(isExcluded ? 0.4 : 1.0)
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder.fill")
+                                .font(.title3)
+                                .foregroundStyle(Color(hex: item.color) ?? Color(hex: "#0098FF")!)
+                            Text(item.name)
+                                .font(.body)
+                                .foregroundStyle(isExcluded ? .secondary : .primary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
                             if isExcluded {
-                                Text("(élément sélectionné)")
+                                Text("Sélectionné")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color(.tertiaryLabel))
                             }
                         }
+                        .padding(.vertical, 4)
                     }
                     .disabled(isExcluded)
                     .buttonStyle(.plain)
                     .onAppear { Task { await model.loadMoreIfNeeded(current: item) } }
                 }
+            }
 
-                if model.isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
+            if model.isLoading && model.items.isEmpty {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
                 }
+                .listRowBackground(Color.clear)
             }
         }
         .listStyle(.insetGrouped)

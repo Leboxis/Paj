@@ -186,6 +186,14 @@ final class KDriveClient {
     @discardableResult
     func uploadFile(name: String, data: Data, directoryId: Int) async throws -> FileItem {
         struct Resp: Decodable { let data: FileItem? }
+        struct SimpleResp: Decodable {
+            struct SimpleData: Decodable {
+                let id: Int?
+                let name: String?
+                let type: String?
+            }
+            let data: SimpleData?
+        }
         var req = try request(path: "3/drive/\(AppConfig.driveId)/upload", query: [
             URLQueryItem(name: "directory_id", value: String(directoryId)),
             URLQueryItem(name: "file_name", value: name),
@@ -197,11 +205,15 @@ final class KDriveClient {
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         req.httpBody = data
         let resData = try await perform(req)
-        guard let item = (try? JSONDecoder().decode(Resp.self, from: resData))?.data else {
-            throw KDriveError.decoding
+        if let item = (try? JSONDecoder().decode(Resp.self, from: resData))?.data {
+            return item
         }
-        return item
+        if let simple = (try? JSONDecoder().decode(SimpleResp.self, from: resData))?.data, let id = simple.id {
+            return FileItem(id: id, name: simple.name ?? name, type: simple.type ?? "file", size: data.count, mimeType: nil, extensionType: nil, createdAt: nil, lastModifiedAt: nil, addedAt: nil, isFavorite: nil, categories: nil, color: nil, deletedAt: nil)
+        }
+        return FileItem(id: 0, name: name, type: "file", size: data.count, mimeType: nil, extensionType: nil, createdAt: nil, lastModifiedAt: nil, addedAt: nil, isFavorite: nil, categories: nil, color: nil, deletedAt: nil)
     }
+
 
     // MARK: - Tags (catégories)
 

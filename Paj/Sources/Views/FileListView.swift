@@ -34,6 +34,7 @@ struct FileListView: View {
 
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
+    @State private var showingPhotosPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showingFileImporter = false
     @State private var downloadFileUrl: URL?
@@ -97,6 +98,7 @@ struct FileListView: View {
                 deleteSelectionAction: deleteSelection
             ))
             .modifier(FileImportersModifier(
+                showingPhotosPicker: $showingPhotosPicker,
                 showingFileImporter: $showingFileImporter,
                 selectedPhotoItems: $selectedPhotoItems,
                 isImporting: $isImporting,
@@ -194,7 +196,9 @@ struct FileListView: View {
                     } label: {
                         Label("Nouveau dossier", systemImage: "folder.badge.plus")
                     }
-                    PhotosPicker(selection: $selectedPhotoItems, matching: .any(of: [.images, .videos])) {
+                    Button {
+                        showingPhotosPicker = true
+                    } label: {
                         Label("Importer photos/vidéos", systemImage: "photo.badge.plus")
                     }
                     Button {
@@ -555,6 +559,7 @@ private struct FileAlertsModifier: ViewModifier {
 }
 
 private struct FileImportersModifier: ViewModifier {
+    @Binding var showingPhotosPicker: Bool
     @Binding var showingFileImporter: Bool
     @Binding var selectedPhotoItems: [PhotosPickerItem]
     @Binding var isImporting: Bool
@@ -563,9 +568,16 @@ private struct FileImportersModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .fileImporter(isPresented: $showingFileImporter,
-                          allowedContentTypes: [.item],
-                          allowsMultipleSelection: true) { result in
+            .photosPicker(
+                isPresented: $showingPhotosPicker,
+                selection: $selectedPhotoItems,
+                matching: .any(of: [.images, .videos])
+            )
+            .fileImporter(
+                isPresented: $showingFileImporter,
+                allowedContentTypes: [.item],
+                allowsMultipleSelection: true
+            ) { result in
                 switch result {
                 case .success(let urls):
                     guard !urls.isEmpty else { return }
@@ -573,15 +585,28 @@ private struct FileImportersModifier: ViewModifier {
                     Task { @MainActor in
                         var files: [(name: String, data: Data)] = []
                         for url in urls {
-                            guard url.startAccessingSecurityScopedResource() else { continue }
+                            let accessed = url.startAccessingSecurityScopedResource()
+                            defer {
+                                if accessed { url.stopAccessingSecurityScopedResource() }
+                            }
                             if let data = try? Data(contentsOf: url) {
                                 files.append((url.lastPathComponent, data))
+                            } else {
+                                var coordinatedData: Data?
+                                let coordinator = NSFileCoordinator()
+                                coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: nil) { readUrl in
+                                    coordinatedData = try? Data(contentsOf: readUrl)
+                                }
+                                if let d = coordinatedData {
+                                    files.append((url.lastPathComponent, d))
+                                }
                             }
-                            url.stopAccessingSecurityScopedResource()
                         }
                         if !files.isEmpty {
                             let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
                             await model.uploadMultipleFiles(files, directoryId: dirId)
+                        } else {
+                            model.errorMessage = "Impossible de lire le ou les fichiers sélectionnés."
                         }
                         isImporting = false
                     }
@@ -600,7 +625,7 @@ private struct FileImportersModifier: ViewModifier {
                                 files.append(media)
                             }
                         } catch {
-                            // Erreur individuelle ignorée pour tenter les autres
+                            // On tente les autres médias
                         }
                     }
                     if !files.isEmpty {

@@ -66,10 +66,8 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("À propos") {
+                Section {
                     LabeledContent("Version", value: version)
-                    LabeledContent("Build", value: build)
-                    LabeledContent("Développé pour", value: "kdrive Infomaniak (API v2/v3)")
                 }
 
                 Section {
@@ -99,10 +97,6 @@ struct SettingsView: View {
 
     private var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-    }
-
-    private var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
 
     private func loadDriveInfo() async {
