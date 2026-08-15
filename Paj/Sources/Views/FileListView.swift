@@ -3,7 +3,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 /// Contenu d'onglet générique : liste ou grille (bascule en toolbar), tri
-/// serveur, recherche globale, création de dossiers, import de photos/fichiers,
+/// serveur, recherche globale multi-mots, création de dossiers, import de photos/vidéos/fichiers,
 /// pagination par curseur, sélection multiple avec barre d'actions
 /// (favori, déplacer, tags, renommer, supprimer), visionneuse plein écran.
 struct FileListView: View {
@@ -16,6 +16,7 @@ struct FileListView: View {
     @AppStorage private var gridView: Bool
     @AppStorage private var sortField: String
     @AppStorage private var sortAscending: Bool
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
 
     @StateObject private var selection = SelectionState()
 
@@ -33,9 +34,11 @@ struct FileListView: View {
 
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
-    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showingFileImporter = false
-    @State private var shareUrl: URL?
+    @State private var downloadFileUrl: URL?
+    @State private var isDownloading = false
+    @State private var isImporting = false
 
     init(model: FileListModel,
          storageKey: String,
@@ -77,7 +80,7 @@ struct FileListView: View {
                 textItem: $textItem,
                 moveTargets: $moveTargets,
                 tagItems: $tagItems,
-                shareUrl: $shareUrl,
+                downloadFileUrl: $downloadFileUrl,
                 model: model,
                 selection: selection
             ))
@@ -95,25 +98,35 @@ struct FileListView: View {
             ))
             .modifier(FileImportersModifier(
                 showingFileImporter: $showingFileImporter,
-                selectedPhotoItem: $selectedPhotoItem,
+                selectedPhotoItems: $selectedPhotoItems,
+                isImporting: $isImporting,
                 currentDirectoryId: currentDirectoryId,
                 model: model
             ))
             .modifier(FileOverlaysModifier(
                 model: model,
                 selectionActive: selection.isActive,
-                searchQuery: searchQuery
+                searchQuery: searchQuery,
+                isDownloading: isDownloading,
+                isImporting: isImporting
             ))
     }
 
     private func handleSearchChange(_ query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
+        let words = query.components(separatedBy: .whitespacesAndNewlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        if words.isEmpty {
             reloadForSort()
         } else {
-            model.setLoaderAndReload { cursor in
-                try await KDriveClient.shared.searchFiles(query: trimmed, cursor: cursor)
+            // Filtrage strict : tous les mots saisis doivent obligatoirement se trouver dans le titre/nom du fichier
+            let filterBlock: (FileItem) -> Bool = { item in
+                words.allSatisfy { word in
+                    item.name.localizedCaseInsensitiveContains(word)
+                }
             }
+            let queryParam = words.joined(separator: " ")
+            model.setLoaderAndReload({ cursor in
+                try await KDriveClient.shared.searchFiles(query: queryParam, cursor: cursor)
+            }, filter: filterBlock)
         }
     }
 
@@ -181,8 +194,8 @@ struct FileListView: View {
                     } label: {
                         Label("Nouveau dossier", systemImage: "folder.badge.plus")
                     }
-                    PhotosPicker(selection: $selectedPhotoItem, matching: .any(of: [.images, .videos])) {
-                        Label("Importer photo/vidéo", systemImage: "photo.badge.plus")
+                    PhotosPicker(selection: $selectedPhotoItems, matching: .any(of: [.images, .videos])) {
+                        Label("Importer photos/vidéos", systemImage: "photo.badge.plus")
                     }
                     Button {
                         showingFileImporter = true
@@ -216,11 +229,15 @@ struct FileListView: View {
 
     // MARK: - Contenu
 
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, cardGridColumns))
+    }
+
     @ViewBuilder
     private var listContent: some View {
         if gridView {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), spacing: 10)], spacing: 12) {
+                LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(model.items) { item in
                         gridCell(item)
                     }
@@ -329,42 +346,62 @@ struct FileListView: View {
     @ViewBuilder
     private func contextActions(_ item: FileItem) -> some View {
         Button {
+            infoItem = item
+        } label: {
+            Label("Détails", systemImage: "info.circle")
+        }
+
+        Button {
             Task { await model.toggleFavorite(item) }
         } label: {
             Label(item.isFavorite == true ? "Retirer des favoris" : "Ajouter aux favoris",
                   systemImage: item.isFavorite == true ? "star.slash" : "star")
         }
+
         if !item.isDirectory {
             Button {
-                Task { @MainActor in
-                    if let url = try? await KDriveClient.shared.temporaryUrl(for: item) {
-                        shareUrl = url
-                    }
-                }
+                downloadFile(item)
             } label: {
-                Label("Partager le lien", systemImage: "square.and.arrow.up")
+                Label("Télécharger", systemImage: "square.and.arrow.down")
             }
         }
+
         Button {
             renamingItem = item
             newName = item.name
         } label: {
             Label("Renommer", systemImage: "pencil")
         }
+
         Button {
             moveTargets = [item]
         } label: {
             Label("Déplacer", systemImage: "folder")
         }
+
         Button {
             tagItems = [item]
         } label: {
             Label("Tags", systemImage: "tag")
         }
+
         Button(role: .destructive) {
             deletingItem = item
         } label: {
             Label("Supprimer", systemImage: "trash")
+        }
+    }
+
+    private func downloadFile(_ item: FileItem) {
+        isDownloading = true
+        Task { @MainActor in
+            do {
+                let localURL = try await FileDownloadHelper.downloadAndPrepareLocalURL(item: item)
+                downloadFileUrl = localURL
+            } catch {
+                model.errorMessage = "Échec du téléchargement : \(error.localizedDescription)"
+            }
+            isDownloading = false
         }
     }
 
@@ -408,7 +445,7 @@ private struct FileSheetsModifier: ViewModifier {
     @Binding var textItem: FileItem?
     @Binding var moveTargets: [FileItem]
     @Binding var tagItems: [FileItem]
-    @Binding var shareUrl: URL?
+    @Binding var downloadFileUrl: URL?
     @ObservedObject var model: FileListModel
     @ObservedObject var selection: SelectionState
 
@@ -421,8 +458,9 @@ private struct FileSheetsModifier: ViewModifier {
             .sheet(item: $textItem) { TextFileView(item: $0) }
             .sheet(isPresented: Binding(get: { !moveTargets.isEmpty },
                                         set: { if !$0 { moveTargets = [] } })) {
-                DirectoryPickerView { destination in
+                DirectoryPickerView(excludedIds: Set(moveTargets.map(\.id))) { destination in
                     let targets = moveTargets
+                    moveTargets = []
                     selection.end()
                     Task {
                         await model.performBatch(targets, label: "déplacement") {
@@ -438,9 +476,9 @@ private struct FileSheetsModifier: ViewModifier {
                     Task { await model.refresh() }
                 }
             }
-            .sheet(isPresented: Binding(get: { shareUrl != nil },
-                                        set: { if !$0 { shareUrl = nil } })) {
-                if let url = shareUrl {
+            .sheet(isPresented: Binding(get: { downloadFileUrl != nil },
+                                        set: { if !$0 { downloadFileUrl = nil } })) {
+                if let url = downloadFileUrl {
                     ShareSheet(activityItems: [url])
                 }
             }
@@ -518,7 +556,8 @@ private struct FileAlertsModifier: ViewModifier {
 
 private struct FileImportersModifier: ViewModifier {
     @Binding var showingFileImporter: Bool
-    @Binding var selectedPhotoItem: PhotosPickerItem?
+    @Binding var selectedPhotoItems: [PhotosPickerItem]
+    @Binding var isImporting: Bool
     var currentDirectoryId: Int?
     @ObservedObject var model: FileListModel
 
@@ -526,32 +565,52 @@ private struct FileImportersModifier: ViewModifier {
         content
             .fileImporter(isPresented: $showingFileImporter,
                           allowedContentTypes: [.item],
-                          allowsMultipleSelection: false) { result in
+                          allowsMultipleSelection: true) { result in
                 switch result {
                 case .success(let urls):
-                    guard let url = urls.first else { return }
-                    guard url.startAccessingSecurityScopedResource() else { return }
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    if let data = try? Data(contentsOf: url) {
-                        let name = url.lastPathComponent
-                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                        Task {
-                            await model.uploadFile(name: name, data: data, directoryId: dirId)
+                    guard !urls.isEmpty else { return }
+                    isImporting = true
+                    Task { @MainActor in
+                        var files: [(name: String, data: Data)] = []
+                        for url in urls {
+                            guard url.startAccessingSecurityScopedResource() else { continue }
+                            if let data = try? Data(contentsOf: url) {
+                                files.append((url.lastPathComponent, data))
+                            }
+                            url.stopAccessingSecurityScopedResource()
                         }
+                        if !files.isEmpty {
+                            let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                            await model.uploadMultipleFiles(files, directoryId: dirId)
+                        }
+                        isImporting = false
                     }
                 case .failure(let error):
-                    model.errorMessage = error.localizedDescription
+                    model.errorMessage = "Importation impossible : \(error.localizedDescription)"
                 }
             }
-            .onChange(of: selectedPhotoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self) {
-                        let name = "Upload_\(Int(Date().timeIntervalSince1970)).jpg"
-                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                        await model.uploadFile(name: name, data: data, directoryId: dirId)
+            .onChange(of: selectedPhotoItems) { _, items in
+                guard !items.isEmpty else { return }
+                isImporting = true
+                Task { @MainActor in
+                    var files: [(name: String, data: Data)] = []
+                    for item in items {
+                        do {
+                            if let media = try await MediaLoader.loadMedia(from: item) {
+                                files.append(media)
+                            }
+                        } catch {
+                            // Erreur individuelle ignorée pour tenter les autres
+                        }
                     }
-                    selectedPhotoItem = nil
+                    if !files.isEmpty {
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        await model.uploadMultipleFiles(files, directoryId: dirId)
+                    } else {
+                        model.errorMessage = "Impossible de lire les photos ou vidéos sélectionnées."
+                    }
+                    selectedPhotoItems = []
+                    isImporting = false
                 }
             }
     }
@@ -561,6 +620,8 @@ private struct FileOverlaysModifier: ViewModifier {
     @ObservedObject var model: FileListModel
     var selectionActive: Bool
     var searchQuery: String
+    var isDownloading: Bool
+    var isImporting: Bool
 
     func body(content: Content) -> some View {
         content
@@ -573,14 +634,21 @@ private struct FileOverlaysModifier: ViewModifier {
                 if model.items.isEmpty && !model.isLoading && model.errorMessage == nil && !selectionActive {
                     ContentUnavailableView(searchQuery.isEmpty ? "Vide" : "Aucun résultat",
                                            systemImage: searchQuery.isEmpty ? "tray" : "magnifyingglass",
-                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé pour « \(searchQuery) »"))
+                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé contenant tous les mots de « \(searchQuery) »"))
                 }
             }
             .overlay {
-                if model.isBatching {
+                if model.isBatching || isImporting || isDownloading {
                     ZStack {
-                        Color(.systemBackground).opacity(0.6).ignoresSafeArea()
-                        ProgressView("Opération en cours…")
+                        Color(.systemBackground).opacity(0.7).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text(isImporting ? "Importation en cours…" : (isDownloading ? "Téléchargement en cours…" : "Opération en cours…"))
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .padding(20)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemGroupedBackground)))
+                        .shadow(radius: 6)
                     }
                 }
             }

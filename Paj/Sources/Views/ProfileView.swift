@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Onglet Profil : stockage du drive (pourcentage, restant, total),
 /// uploads récents et favoris les plus consultés (3 miniatures + page
-/// détaillée paginée 12 par 12), accès à la corbeille.
+/// détaillée avec défilement infini), accès à la corbeille.
 struct ProfileView: View {
     @State private var driveInfo: DriveInfo?
     @State private var uploads: [FileItem] = []
@@ -163,11 +163,12 @@ struct ProfileThumb: View {
     }
 }
 
-/// Page détaillée : grille paginée de 12 éléments avec bouton
-/// « Afficher 12 de plus » (curseur, à l'infini).
+/// Page détaillée : grille paginée avec défilement infini automatique.
 struct PagedFilesView: View {
     let title: String
     var loader: (String?) async throws -> Page<FileItem>
+
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
 
     @State private var items: [FileItem] = []
     @State private var cursor: String?
@@ -179,28 +180,36 @@ struct PagedFilesView: View {
     @State private var infoItem: FileItem?
     @State private var textItem: FileItem?
 
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, cardGridColumns))
+    }
+
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), spacing: 10)], spacing: 12) {
+            LazyVGrid(columns: gridColumns, spacing: 12) {
                 ForEach(items) { item in
                     cell(item)
+                        .onAppear {
+                            loadMoreIfNeeded(current: item)
+                        }
                 }
             }
             .padding(12)
-            if hasMore && !items.isEmpty {
-                Button {
-                    Task { await loadMore() }
-                } label: {
-                    Label(isLoading ? "Chargement…" : "Afficher 12 de plus",
-                          systemImage: "chevron.down")
+
+            if isLoading && !items.isEmpty {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
                 }
-                .buttonStyle(.bordered)
-                .disabled(isLoading)
-                .padding(.bottom, 20)
+                .padding(.vertical, 16)
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            await refresh()
+        }
         .task {
             if items.isEmpty { await loadMore() }
         }
@@ -227,12 +236,28 @@ struct PagedFilesView: View {
         }
     }
 
+    private func refresh() async {
+        cursor = nil
+        hasMore = true
+        items.removeAll()
+        await loadMore()
+    }
+
+    private func loadMoreIfNeeded(current: FileItem) {
+        guard hasMore && !isLoading, !items.isEmpty else { return }
+        guard let idx = items.firstIndex(where: { $0.id == current.id }),
+              items.count - idx <= 6 else { return }
+        Task { await loadMore() }
+    }
+
     private func loadMore() async {
-        guard !isLoading else { return }
+        guard !isLoading && hasMore else { return }
         isLoading = true
         do {
             let page = try await loader(cursor)
-            items.append(contentsOf: page.data ?? [])
+            let existingIDs = Set(items.map(\.id))
+            let incoming = (page.data ?? []).filter { !existingIDs.contains($0.id) }
+            items.append(contentsOf: incoming)
             cursor = page.cursor
             hasMore = page.hasMore ?? !((page.cursor ?? "").isEmpty)
         } catch {

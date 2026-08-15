@@ -15,6 +15,7 @@ final class FileListModel: ObservableObject {
     private var cursor: String?
     private var hasMore = true
     private var loader: (String?) async throws -> Page<FileItem>
+    private var filterPredicate: ((FileItem) -> Bool)?
     private var loadTask: Task<Void, Never>?
 
     init(loader: @escaping (String?) async throws -> Page<FileItem>) {
@@ -23,8 +24,10 @@ final class FileListModel: ObservableObject {
 
     var canLoadMore: Bool { hasMore && !isLoading }
 
-    func setLoaderAndReload(_ newLoader: @escaping (String?) async throws -> Page<FileItem>) {
+    func setLoaderAndReload(_ newLoader: @escaping (String?) async throws -> Page<FileItem>,
+                            filter: ((FileItem) -> Bool)? = nil) {
         loader = newLoader
+        filterPredicate = filter
         Task { await refresh() }
     }
 
@@ -56,13 +59,22 @@ final class FileListModel: ObservableObject {
         do {
             let page = try await loader(cursor)
             guard !Task.isCancelled else { return }
-            var existingIDs = Set(items.map(\.id))
-            let incoming = (page.data ?? []).filter { !existingIDs.contains($0.id) }
-            var merged = items + incoming
+            var incoming = page.data ?? []
+            if let filter = filterPredicate {
+                incoming = incoming.filter(filter)
+            }
+            let existingIDs = Set(items.map(\.id))
+            let uniqueIncoming = incoming.filter { !existingIDs.contains($0.id) }
+            let merged = items + uniqueIncoming
             // Dossiers toujours en tête, ordre relatif conservé
             items = merged.filter { $0.isDirectory } + merged.filter { !$0.isDirectory }
             cursor = page.cursor
             hasMore = page.hasMore ?? !((page.cursor ?? "").isEmpty)
+
+            // Si le filtre a éliminé des éléments et qu'on a moins de 10 éléments affichés alors qu'il reste des pages, on continue le chargement
+            if items.count < 10 && hasMore && !(page.data ?? []).isEmpty {
+                await performLoad()
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -132,6 +144,26 @@ final class FileListModel: ObservableObject {
         } catch {
             errorMessage = "Échec du téléversement : \(error.localizedDescription)"
         }
+    }
+
+    func uploadMultipleFiles(_ files: [(name: String, data: Data)], directoryId: Int) async {
+        guard !files.isEmpty else { return }
+        isBatching = true
+        var failures = 0
+        var lastError: String?
+        for file in files {
+            do {
+                _ = try await KDriveClient.shared.uploadFile(name: file.name, data: file.data, directoryId: directoryId)
+            } catch {
+                failures += 1
+                lastError = error.localizedDescription
+            }
+        }
+        isBatching = false
+        if failures > 0 {
+            errorMessage = "\(failures) échec(s) d'importation sur \(files.count) : \(lastError ?? "erreur inconnue")"
+        }
+        await refresh()
     }
 
     // MARK: - Actions par lot

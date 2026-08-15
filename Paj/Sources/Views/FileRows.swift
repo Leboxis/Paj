@@ -191,14 +191,15 @@ struct FileGridCell: View {
     }
 }
 
-// MARK: - Fiche d'un fichier non média
+// MARK: - Fiche d'un fichier
 
 struct FileInfoSheet: View {
     let item: FileItem
 
     @Environment(\.dismiss) private var dismiss
-    @State private var temporaryUrl: URL?
-    @State private var isFetchingUrl = false
+    @State private var downloadUrl: URL?
+    @State private var isDownloading = false
+    @State private var isFetchingBrowserUrl = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -208,6 +209,7 @@ struct FileInfoSheet: View {
                     FileRow(item: item)
                         .listRowBackground(Color(.secondarySystemGroupedBackground))
                 }
+
                 Section("Détails") {
                     LabeledContent("Type", value: item.isDirectory ? "Dossier" : (item.mimeType ?? item.extensionType ?? "—"))
                     if let size = item.size, size > 0 {
@@ -218,28 +220,36 @@ struct FileInfoSheet: View {
                     }
                     LabeledContent("ID", value: String(item.id))
                 }
+
                 if !item.isDirectory {
                     Section {
                         Button {
-                            openTemporaryUrl()
+                            downloadFile()
                         } label: {
                             HStack {
-                                Label("Ouvrir via URL temporaire", systemImage: "safari")
+                                Label("Télécharger / Partager le fichier", systemImage: "square.and.arrow.down")
                                 Spacer()
-                                if isFetchingUrl {
+                                if isDownloading {
                                     ProgressView()
                                 }
                             }
                         }
-                        .disabled(isFetchingUrl)
+                        .disabled(isDownloading)
 
-                        if let url = temporaryUrl {
-                            ShareLink(item: url) {
-                                Label("Partager le lien", systemImage: "square.and.arrow.up")
+                        Button {
+                            openInBrowser()
+                        } label: {
+                            HStack {
+                                Label("Ouvrir dans le navigateur", systemImage: "safari")
+                                Spacer()
+                                if isFetchingBrowserUrl {
+                                    ProgressView()
+                                }
                             }
                         }
+                        .disabled(isFetchingBrowserUrl)
                     } footer: {
-                        Text("Ouvre ou partage le fichier via un lien signé valable 1 h.")
+                        Text("Télécharge le fichier sur l'appareil (Enregistrer dans Fichiers, Photos, etc.) ou l'ouvre via un lien temporaire sécurisé.")
                     }
                 }
             }
@@ -247,6 +257,12 @@ struct FileInfoSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 Button("Fermer") { dismiss() }
+            }
+            .sheet(isPresented: Binding(get: { downloadUrl != nil },
+                                        set: { if !$0 { downloadUrl = nil } })) {
+                if let url = downloadUrl {
+                    ShareSheet(activityItems: [url])
+                }
             }
             .alert("Erreur", isPresented: Binding(get: { errorMessage != nil },
                                                   set: { if !$0 { errorMessage = nil } })) {
@@ -257,18 +273,32 @@ struct FileInfoSheet: View {
         }
     }
 
-    private func openTemporaryUrl() {
-        isFetchingUrl = true
+    private func downloadFile() {
+        isDownloading = true
+        errorMessage = nil
+        Task { @MainActor in
+            do {
+                let localURL = try await FileDownloadHelper.downloadAndPrepareLocalURL(item: item)
+                downloadUrl = localURL
+            } catch {
+                errorMessage = "Échec du téléchargement : \(error.localizedDescription)"
+            }
+            isDownloading = false
+        }
+    }
+
+    private func openInBrowser() {
+        isFetchingBrowserUrl = true
         errorMessage = nil
         Task { @MainActor in
             do {
                 let url = try await KDriveClient.shared.temporaryUrl(for: item)
-                temporaryUrl = url
                 _ = await UIApplication.shared.open(url)
             } catch {
                 errorMessage = error.localizedDescription
             }
-            isFetchingUrl = false
+            isFetchingBrowserUrl = false
         }
     }
 }
+

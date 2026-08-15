@@ -82,23 +82,19 @@ struct MediaViewerView: View {
         guard let item = currentItem, !isSharing else { return }
         isSharing = true
         Task { @MainActor in
-            if let url = try? await KDriveClient.shared.temporaryUrl(for: item) {
-                shareUrl = url
+            do {
+                let localURL = try await FileDownloadHelper.downloadAndPrepareLocalURL(item: item)
+                shareUrl = localURL
+            } catch {
+                if let url = try? await KDriveClient.shared.temporaryUrl(for: item) {
+                    shareUrl = url
+                }
             }
             isSharing = false
         }
     }
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
-}
 
 private struct MediaPage: View {
     let item: FileItem

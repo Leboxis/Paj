@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
 
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
+
     @State private var driveName: String?
     @State private var usedSize: Int64?
     @State private var totalSize: Int64?
@@ -22,6 +24,19 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
+
+                Section {
+                    Picker("Nombre de colonnes", selection: $cardGridColumns) {
+                        Text("2").tag(2)
+                        Text("3 (défaut)").tag(3)
+                        Text("4").tag(4)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Affichage des cartes")
+                } footer: {
+                    Text("Définit le nombre de colonnes dans la vue grille (3 colonnes par défaut).")
                 }
 
                 Section {
