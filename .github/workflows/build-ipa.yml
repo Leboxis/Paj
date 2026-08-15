@@ -5,13 +5,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: build-ipa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: IPA non signée (prête pour SideStore)
+    name: IPA + release + source LiveContainer
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -23,11 +26,10 @@ jobs:
       - name: Générer le projet Xcode
         run: xcodegen generate
 
+      # IPA volontairement SANS secrets : le repo est public et l'IPA est
+      # téléchargeable anonymement — la config (token, drive, code) se fait
+      # dans l'app au premier lancement et reste dans le trousseau iOS.
       - name: Compiler l'app (Release, sans signature)
-        env:
-          KDRIVE_API_TOKEN: ${{ secrets.KDRIVE_API_TOKEN }}
-          KDRIVE_ID: ${{ secrets.KDRIVE_ID }}
-          APP_ACCESS_CODE: ${{ secrets.APP_ACCESS_CODE }}
         run: |
           xcodebuild archive \
             -project Paj.xcodeproj \
@@ -39,10 +41,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS="" \
-            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            KDRIVE_API_TOKEN="$KDRIVE_API_TOKEN" \
-            KDRIVE_ID="$KDRIVE_ID" \
-            APP_ACCESS_CODE="$APP_ACCESS_CODE"
+            MARKETING_VERSION="1.1.$GITHUB_RUN_NUMBER" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
       - name: Empaqueter l'IPA
         run: |
@@ -52,10 +52,54 @@ jobs:
           zip -qry Paj.ipa Payload
           ls -lh Paj.ipa
 
-      - name: Publier l'artifact
+      # Release GitHub (URL stable pour LiveContainer) + apps.json au format
+      # AltStore, committé à la racine pour l'URL raw stable.
+      - name: Publier la release et la source LiveContainer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="1.1.$GITHUB_RUN_NUMBER"
+          TAG="v$VERSION"
+          SIZE=$(stat -f%z build/Paj.ipa)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh release create "$TAG" build/Paj.ipa \
+            --title "Paj $VERSION" \
+            --notes "Build CI automatique (run #$GITHUB_RUN_NUMBER). Configuration du token à faire dans l'app au premier lancement." \
+            --latest
+          python3 - "$VERSION" "$SIZE" "$DATE" << 'PY'
+          import json, sys
+          version, size, date = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          source = {
+              "name": "Paj",
+              "identifier": "com.paj.drive.source",
+              "apps": [
+                  {
+                      "name": "Paj",
+                      "bundleIdentifier": "com.paj.drive",
+                      "version": version,
+                      "versionDate": date,
+                      "versionDescription": "Client kdrive personnel (Infomaniak).",
+                      "downloadURL": "https://github.com/Leboxis/Paj/releases/latest/download/Paj.ipa",
+                      "size": size,
+                      "tintColor": "0A84FF",
+                      "developerName": "Leboxis",
+                      "iconURL": "https://raw.githubusercontent.com/Leboxis/Paj/main/Paj/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png"
+                  }
+              ]
+          }
+          with open("apps.json", "w", encoding="utf-8") as f:
+              json.dump(source, f, indent=2, ensure_ascii=False)
+          PY
+          git config user.name "Paj CI"
+          git config user.email "paj@users.noreply.github.com"
+          git add apps.json
+          git commit -m "Source LiveContainer v$VERSION [skip ci]" || echo "rien à committer"
+          git push
+
+      - name: Publier l'artifact (debug)
         uses: actions/upload-artifact@v4
         with:
           name: Paj-ipa
           path: build/Paj.ipa
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: error
