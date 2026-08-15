@@ -33,41 +33,6 @@ extension FileItem {
     }
 }
 
-// MARK: - Vignette avec cache disque + mémoire
-
-struct RemoteThumbnail: View {
-    let file: FileItem
-    var width: Int = 160
-    var height: Int = 160
-    var corner: CGFloat = 8
-
-    @State private var image: UIImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: corner)
-                        .fill(Color(.systemGray5).opacity(0.5))
-                    FileIcon(item: file, size: 28)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: corner))
-        .task(id: file.id) {
-            let key = "\(file.id)_\(width)x\(height)"
-            image = await ThumbnailStore.shared.image(forKey: key) {
-                try await KDriveClient.shared.thumbnailData(fileId: file.id, width: width, height: height)
-            }
-        }
-    }
-}
-
 // MARK: - Icône stylée par type de fichier
 
 struct FileIcon: View {
@@ -103,6 +68,7 @@ struct FileIcon: View {
 
 struct FileRow: View {
     let item: FileItem
+    var subtitleText: String? = nil
     var selecting = false
 
     @ObservedObject private var categoryStore = CategoryStore.shared
@@ -125,12 +91,13 @@ struct FileRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(item.subtitle)
+                Text(subtitleText ?? item.subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
+
 
             if !item.tagIDs.isEmpty {
                 HStack(spacing: 4) {
