@@ -21,12 +21,14 @@ struct RootView: View {
 struct MainTabView: View {
     var body: some View {
         TabView {
-            BrowseView()
-                .tabItem { Label("Parcourir", systemImage: "folder") }
-            TagsView()
-                .tabItem { Label("Tags", systemImage: "tag") }
             FavoritesView()
                 .tabItem { Label("Favoris", systemImage: "star") }
+            TagsView()
+                .tabItem { Label("Tags", systemImage: "tag") }
+            BrowseView()
+                .tabItem { Label("Accueil", systemImage: "house") }
+            TrashView()
+                .tabItem { Label("Corbeille", systemImage: "trash") }
             SettingsView()
                 .tabItem { Label("Réglages", systemImage: "gearshape") }
         }

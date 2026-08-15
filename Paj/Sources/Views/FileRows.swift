@@ -56,10 +56,11 @@ struct FileIcon: View {
 struct FileRow: View {
     let item: FileItem
     var selecting = false
+    var subtitleText: String? = nil
 
     var body: some View {
         HStack(spacing: 10) {
-            if item.isImage {
+            if item.isMedia {
                 RemoteThumbnail(file: item, width: 132, height: 132, corner: 6)
                     .frame(width: 44, height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -72,7 +73,7 @@ struct FileRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(item.subtitle)
+                Text(subtitleText ?? item.subtitle)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

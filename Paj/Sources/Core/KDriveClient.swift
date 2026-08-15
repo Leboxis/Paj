@@ -79,10 +79,12 @@ final class KDriveClient {
     func listDirectory(id: Int, cursor: String?, orderBy: String, order: String, directoriesOnly: Bool = false) async throws -> Page<FileItem> {
         var extra = [
             URLQueryItem(name: "limit", value: "100"),
-            URLQueryItem(name: "order_by", value: orderBy),
-            URLQueryItem(name: "order", value: order),
             URLQueryItem(name: "with", value: "categories")
         ]
+        if !orderBy.isEmpty && orderBy != "original" {
+            extra.append(URLQueryItem(name: "order_by", value: orderBy))
+            extra.append(URLQueryItem(name: "order", value: order))
+        }
         if directoriesOnly {
             extra.append(URLQueryItem(name: "type", value: "dir"))
         }
@@ -90,12 +92,15 @@ final class KDriveClient {
     }
 
     func favorites(cursor: String?, orderBy: String, order: String) async throws -> Page<FileItem> {
-        try await get("3/drive/\(AppConfig.driveId)/files/favorites", query: Self.paginationQuery(cursor: cursor, extra: [
+        var extra = [
             URLQueryItem(name: "limit", value: "100"),
-            URLQueryItem(name: "order_by", value: orderBy),
-            URLQueryItem(name: "order", value: order),
             URLQueryItem(name: "with", value: "categories")
-        ]))
+        ]
+        if !orderBy.isEmpty && orderBy != "original" {
+            extra.append(URLQueryItem(name: "order_by", value: orderBy))
+            extra.append(URLQueryItem(name: "order", value: order))
+        }
+        return try await get("3/drive/\(AppConfig.driveId)/files/favorites", query: Self.paginationQuery(cursor: cursor, extra: extra))
     }
 
     /// Fichiers portant un tag donné (recherche par id de catégorie).
@@ -176,6 +181,32 @@ final class KDriveClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await perform(req)
+    }
+
+    // MARK: - Corbeille
+
+    func trash(cursor: String?) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/trash", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "limit", value: "100")
+        ]))
+    }
+
+    func restore(_ item: FileItem) async throws {
+        var req = try request(path: "2/drive/\(AppConfig.driveId)/trash/\(item.id)/restore")
+        req.httpMethod = "POST"
+        _ = try await perform(req)
+    }
+
+    func deletePermanently(_ item: FileItem) async throws {
+        var req = try request(path: "2/drive/\(AppConfig.driveId)/trash/\(item.id)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
+    func emptyTrash() async throws {
+        var req = try request(path: "2/drive/\(AppConfig.driveId)/trash")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
     }
 
     // MARK: - Médias

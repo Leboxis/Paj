@@ -35,9 +35,9 @@ struct FileListView: View {
         self.sortable = sortable
         self.onOpenDirectory = onOpenDirectory
         self.makeLoader = makeLoader
-        _gridView = AppStorage(wrappedValue: false, storageKey + ".gridView")
-        _sortField = AppStorage(wrappedValue: SortField.name.rawValue, storageKey + ".sortField")
-        _sortAscending = AppStorage(wrappedValue: true, storageKey + ".sortAscending")
+        _gridView = AppStorage(wrappedValue: true, storageKey + ".isGrid")
+        _sortField = AppStorage(wrappedValue: SortField.original.rawValue, storageKey + ".sortMode")
+        _sortAscending = AppStorage(wrappedValue: true, storageKey + ".sortAsc")
     }
 
     private var selectedItems: [FileItem] {

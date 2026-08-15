@@ -50,7 +50,11 @@ final class FileListModel: ObservableObject {
             do {
                 let page = try await loader(cursor)
                 guard !Task.isCancelled else { return }
-                items.append(contentsOf: page.data ?? [])
+                var merged = items
+                merged.append(contentsOf: page.data ?? [])
+                // Dossiers toujours en tête, ordre relatif conservé,
+                // quel que soit le mode de tri demandé.
+                items = merged.filter { $0.isDirectory } + merged.filter { !$0.isDirectory }
                 cursor = page.cursor
                 hasMore = page.hasMore ?? !((page.cursor ?? "").isEmpty)
             } catch is CancellationError {

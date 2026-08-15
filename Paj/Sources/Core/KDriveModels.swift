@@ -16,8 +16,13 @@ struct FileItem: Identifiable, Hashable, Codable {
     var isFavorite: Bool?
     var categories: [FileCategoryLink]?
     var color: String?
+    var deletedAt: Int?
 
     var isDirectory: Bool { type == "dir" || type == "directory" }
+
+    var deletionDate: Date? {
+        deletedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+    }
 
     /// IDs des tags appliqués au fichier (l'API liste les ids ; les noms et
     /// couleurs viennent de CategoryStore).
@@ -43,7 +48,7 @@ struct FileItem: Identifiable, Hashable, Codable {
     /// Racine du drive (dossier « Private », id 5 — validé contre l'API).
     static func root() -> FileItem {
         FileItem(id: AppConfig.rootDirectoryId,
-                 name: "Mon drive",
+                 name: "Accueil",
                  type: "dir",
                  size: nil,
                  mimeType: nil,
@@ -53,7 +58,8 @@ struct FileItem: Identifiable, Hashable, Codable {
                  addedAt: nil,
                  isFavorite: nil,
                  categories: nil,
-                 color: nil)
+                 color: nil,
+                 deletedAt: nil)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -66,6 +72,7 @@ struct FileItem: Identifiable, Hashable, Codable {
         case isFavorite = "is_favorite"
         case categories
         case color
+        case deletedAt = "deleted_at"
     }
 }
 
@@ -104,7 +111,10 @@ struct DriveInfo: Decodable {
 }
 
 /// Champs de tri supportés par l'API (order_by), triés côté serveur.
+/// `original` demande l'ordre natif kdrive (paramètres de tri omis :
+/// ordre personnalisé du drive).
 enum SortField: String, CaseIterable, Identifiable {
+    case original
     case name
     case lastModified = "last_modified_at"
     case size
@@ -114,11 +124,17 @@ enum SortField: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .original: return "Original (kdrive)"
         case .name: return "Nom"
         case .lastModified: return "Date de modification"
         case .size: return "Taille"
         case .type: return "Type"
         }
+    }
+
+    /// À envoyer comme order_by à l'API (vide = ordre natif).
+    var apiValue: String {
+        self == .original ? "" : rawValue
     }
 }
 
