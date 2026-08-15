@@ -1,0 +1,40 @@
+name: Paj
+options:
+  bundleIdPrefix: com.paj
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Paj:
+    type: application
+    platform: iOS
+    sources:
+      - path: Paj/Sources
+      - path: Paj/Resources
+        excludes:
+          - "Info.plist"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.paj.drive
+        INFOPLIST_FILE: Paj/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: false
+
+schemes:
+  Paj:
+    build:
+      targets:
+        Paj: all
+    run:
+      config: Debug
+    archive:
+      config: Release

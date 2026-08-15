@@ -1,0 +1,17 @@
+# Secrets — ne jamais versionner
+.env
+.env.*
+Api infomaniak.json
+Secrets.xcconfig
+
+# Xcode (le projet est généré par XcodeGen depuis project.yml)
+Paj.xcodeproj/
+DerivedData/
+build/
+*.xcarchive/
+xcuserdata/
+*.xcuserstate
+
+# OS
+.DS_Store
+Thumbs.db

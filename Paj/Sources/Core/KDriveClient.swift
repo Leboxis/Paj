@@ -1,0 +1,172 @@
+import Foundation
+
+enum KDriveError: LocalizedError {
+    case notConfigured
+    case http(Int, String)
+    case decoding
+
+    var errorDescription: String? {
+        switch self {
+        case .notConfigured:
+            return "App non configurée : token ou ID du drive manquant."
+        case .http(let code, let message):
+            return "Erreur API (\(code)) : \(message)"
+        case .decoding:
+            return "Réponse du serveur illisible."
+        }
+    }
+}
+
+/// Client HTTP pour l'API kdrive d'Infomaniak (https://api.infomaniak.com).
+/// Le Bearer token est lu à chaque requête pour prendre en compte un changement
+/// de configuration sans redémarrer l'app.
+final class KDriveClient {
+    static let shared = KDriveClient()
+
+    private let session = URLSession.shared
+    private let base = URL(string: "https://api.infomaniak.com")!
+
+    private init() {}
+
+    // MARK: - Plomberie
+
+    private func request(path: String, query: [URLQueryItem] = []) throws -> URLRequest {
+        guard AppConfig.isConfigured else { throw KDriveError.notConfigured }
+        var comps = URLComponents(url: base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { comps.queryItems = query }
+        var req = URLRequest(url: comps.url!)
+        req.setValue("Bearer \(AppConfig.token)", forHTTPHeaderField: "Authorization")
+        return req
+    }
+
+    private func perform(_ req: URLRequest) async throws -> Data {
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            throw KDriveError.http(0, "Pas de réponse HTTP")
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw KDriveError.http(http.statusCode, Self.errorDescription(data))
+        }
+        return data
+    }
+
+    private static func errorDescription(_ data: Data) -> String {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = obj["error"] as? [String: Any],
+              let desc = error["description"] as? String else { return "erreur inconnue" }
+        return desc
+    }
+
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        let data = try await perform(try request(path: path, query: query))
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw KDriveError.decoding
+        }
+    }
+
+    private static func paginationQuery(cursor: String?, extra: [URLQueryItem]) -> [URLQueryItem] {
+        var q = extra
+        if let cursor, !cursor.isEmpty {
+            q.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return q
+    }
+
+    // MARK: - Lecture
+
+    func listDirectory(id: Int, cursor: String?, orderBy: String, order: String) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/files/\(id)/files", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "limit", value: "100"),
+            URLQueryItem(name: "order_by", value: orderBy),
+            URLQueryItem(name: "order", value: order)
+        ]))
+    }
+
+    func recents(cursor: String?) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/files/recents", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "limit", value: "100")
+        ]))
+    }
+
+    func favorites(cursor: String?, orderBy: String, order: String) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/files/favorites", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "limit", value: "100"),
+            URLQueryItem(name: "order_by", value: orderBy),
+            URLQueryItem(name: "order", value: order)
+        ]))
+    }
+
+    /// Bibliothèque médias : recherche de tous les fichiers image/vidéo du drive,
+    /// triés du plus récemment modifié au plus ancien.
+    func mediaLibrary(cursor: String?) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/files/search", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "types[]", value: "image"),
+            URLQueryItem(name: "types[]", value: "video"),
+            URLQueryItem(name: "depth", value: "unlimited"),
+            URLQueryItem(name: "order_by", value: "last_modified_at"),
+            URLQueryItem(name: "order", value: "desc"),
+            URLQueryItem(name: "limit", value: "100")
+        ]))
+    }
+
+    func driveInfo() async throws -> DriveInfo {
+        struct Resp: Decodable { let data: DriveInfo? }
+        let resp: Resp = try await get("2/drive/\(AppConfig.driveId)")
+        guard let info = resp.data else { throw KDriveError.decoding }
+        return info
+    }
+
+    // MARK: - Actions
+
+    func setFavorite(_ item: FileItem, favorite: Bool) async throws {
+        var req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(item.id)/favorite")
+        req.httpMethod = favorite ? "POST" : "DELETE"
+        _ = try await perform(req)
+    }
+
+    func rename(_ item: FileItem, to name: String) async throws {
+        var req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(item.id)/rename")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["name": name])
+        _ = try await perform(req)
+    }
+
+    func delete(_ item: FileItem) async throws {
+        var req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(item.id)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
+    // MARK: - Médias
+
+    /// URL temporaire signée (1 h) : streaming direct dans AVPlayer,
+    /// lecture distante dans Safari, etc.
+    func temporaryUrl(for item: FileItem) async throws -> URL {
+        struct Resp: Decodable { let data: TemporaryUrlData? }
+        let resp: Resp = try await get("2/drive/\(AppConfig.driveId)/files/\(item.id)/temporary_url", query: [
+            URLQueryItem(name: "duration", value: "3600")
+        ])
+        guard let s = resp.data?.temporaryUrl, let url = URL(string: s) else { throw KDriveError.decoding }
+        return url
+    }
+
+    func thumbnailData(fileId: Int, width: Int, height: Int) async throws -> Data {
+        let req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(fileId)/thumbnail", query: [
+            URLQueryItem(name: "width", value: String(width)),
+            URLQueryItem(name: "height", value: String(height))
+        ])
+        return try await perform(req)
+    }
+
+    /// Aperçu haute résolution pour la visionneuse plein écran.
+    func previewData(fileId: Int, width: Int) async throws -> Data {
+        let req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(fileId)/preview", query: [
+            URLQueryItem(name: "width", value: String(width)),
+            URLQueryItem(name: "quality", value: "90")
+        ])
+        return try await perform(req)
+    }
+}

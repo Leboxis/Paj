@@ -1,0 +1,60 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: IPA non signée (prête pour SideStore)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+
+      - name: Compiler l'app (Release, sans signature)
+        env:
+          KDRIVE_API_TOKEN: ${{ secrets.KDRIVE_API_TOKEN }}
+          KDRIVE_ID: ${{ secrets.KDRIVE_ID }}
+          APP_ACCESS_CODE: ${{ secrets.APP_ACCESS_CODE }}
+        run: |
+          xcodebuild archive \
+            -project Paj.xcodeproj \
+            -scheme Paj \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Paj.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            KDRIVE_API_TOKEN="$KDRIVE_API_TOKEN" \
+            KDRIVE_ID="$KDRIVE_ID" \
+            APP_ACCESS_CODE="$APP_ACCESS_CODE"
+
+      - name: Empaqueter l'IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R "build/Paj.xcarchive/Products/Applications/Paj.app" build/Payload/
+          cd build
+          zip -qry Paj.ipa Payload
+          ls -lh Paj.ipa
+
+      - name: Publier l'artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paj-ipa
+          path: build/Paj.ipa
+          retention-days: 30
+          if-no-files-found: error
