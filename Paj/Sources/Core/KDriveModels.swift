@@ -117,6 +117,23 @@ struct DriveInfo: Decodable {
     }
 }
 
+struct DirectoryCountInfo: Decodable {
+    let count: Int
+    let files: Int
+    let directories: Int
+}
+
+struct DirectorySizeInfo: Decodable {
+    let size: Int
+    let storageSize: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case size
+        case storageSize = "storage_size"
+    }
+}
+
+
 /// Champs de tri supportés par l'API (order_by), triés côté serveur.
 /// `original` demande l'ordre natif kdrive (paramètres de tri omis :
 /// ordre personnalisé du drive).

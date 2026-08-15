@@ -139,6 +139,25 @@ final class KDriveClient {
         return info
     }
 
+    /// Nombre de fichiers et sous-dossiers dans un dossier.
+    func directoryCount(fileId: Int) async throws -> DirectoryCountInfo {
+        struct Resp: Decodable { let data: DirectoryCountInfo? }
+        let resp: Resp = try await get("3/drive/\(AppConfig.driveId)/files/\(fileId)/count")
+        guard let info = resp.data else { throw KDriveError.decoding }
+        return info
+    }
+
+    /// Taille totale d'un dossier avec tous ses enfants (profondeur illimitée).
+    func directorySize(fileId: Int) async throws -> DirectorySizeInfo {
+        struct Resp: Decodable { let data: DirectorySizeInfo? }
+        let resp: Resp = try await get("2/drive/\(AppConfig.driveId)/files/\(fileId)/sizes", query: [
+            URLQueryItem(name: "depth", value: "unlimited")
+        ])
+        guard let info = resp.data else { throw KDriveError.decoding }
+        return info
+    }
+
+
     // MARK: - Actions
 
     func setFavorite(_ item: FileItem, favorite: Bool) async throws {

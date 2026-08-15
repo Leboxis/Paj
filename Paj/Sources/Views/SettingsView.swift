@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var appState: AppState
 
     @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
+    @AppStorage("videoHoverPreview") private var videoHoverPreview: Bool = true
 
     @State private var driveName: String?
     @State private var usedSize: Int64?
@@ -33,11 +34,14 @@ struct SettingsView: View {
                         Text("4").tag(4)
                     }
                     .pickerStyle(.segmented)
+
+                    Toggle("Prévisualisation vidéo au survol", isOn: $videoHoverPreview)
                 } header: {
                     Text("Affichage des cartes")
                 } footer: {
-                    Text("Définit le nombre de colonnes dans la vue grille (3 colonnes par défaut).")
+                    Text("Définit le nombre de colonnes dans la vue grille (3 par défaut) et active la prévisualisation animée des vidéos au survol.")
                 }
+
 
                 Section {
                     Button {

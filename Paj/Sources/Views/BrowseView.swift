@@ -51,16 +51,21 @@ struct DirectoryView: View {
 }
 
 /// Onglet Favoris : fichiers marqués d'une étoile, tri configurable.
+/// Tap sur un dossier favori = ouverture et navigation dans son contenu complet.
 struct FavoritesView: View {
+    @State private var path: [FileItem] = []
     @StateObject private var model = FileListModel { cursor in
         try await KDriveClient.shared.favorites(cursor: cursor, orderBy: "name", order: "asc")
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             FileListView(
                 model: model,
                 storageKey: "favorites",
+                onOpenDirectory: { dir in
+                    path.append(dir)
+                },
                 makeLoader: { orderBy, ascending in
                     { cursor in
                         try await KDriveClient.shared.favorites(cursor: cursor,
@@ -70,6 +75,9 @@ struct FavoritesView: View {
                 }
             )
             .navigationTitle("Favoris")
+            .navigationDestination(for: FileItem.self) { directory in
+                DirectoryView(directory: directory, path: $path)
+            }
         }
     }
 }

@@ -575,40 +575,47 @@ private struct FileImportersModifier: ViewModifier {
             )
             .fileImporter(
                 isPresented: $showingFileImporter,
-                allowedContentTypes: [.item],
+                allowedContentTypes: [.item, .content, .data],
                 allowsMultipleSelection: true
             ) { result in
                 switch result {
                 case .success(let urls):
                     guard !urls.isEmpty else { return }
-                    isImporting = true
-                    Task { @MainActor in
-                        var files: [(name: String, data: Data)] = []
-                        for url in urls {
-                            let accessed = url.startAccessingSecurityScopedResource()
-                            defer {
-                                if accessed { url.stopAccessingSecurityScopedResource() }
+                    var filesToUpload: [(name: String, data: Data)] = []
+                    var lastReadError: String?
+
+                    for url in urls {
+                        let accessing = url.startAccessingSecurityScopedResource()
+                        do {
+                            let data = try Data(contentsOf: url)
+                            filesToUpload.append((url.lastPathComponent, data))
+                        } catch {
+                            var coordinatedData: Data?
+                            var coordErr: NSError?
+                            let coordinator = NSFileCoordinator()
+                            coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: &coordErr) { readUrl in
+                                coordinatedData = try? Data(contentsOf: readUrl)
                             }
-                            if let data = try? Data(contentsOf: url) {
-                                files.append((url.lastPathComponent, data))
+                            if let d = coordinatedData {
+                                filesToUpload.append((url.lastPathComponent, d))
                             } else {
-                                var coordinatedData: Data?
-                                let coordinator = NSFileCoordinator()
-                                coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: nil) { readUrl in
-                                    coordinatedData = try? Data(contentsOf: readUrl)
-                                }
-                                if let d = coordinatedData {
-                                    files.append((url.lastPathComponent, d))
-                                }
+                                lastReadError = coordErr?.localizedDescription ?? error.localizedDescription
                             }
                         }
-                        if !files.isEmpty {
-                            let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                            await model.uploadMultipleFiles(files, directoryId: dirId)
-                        } else {
-                            model.errorMessage = "Impossible de lire le ou les fichiers sélectionnés."
+                        if accessing {
+                            url.stopAccessingSecurityScopedResource()
                         }
-                        isImporting = false
+                    }
+
+                    if !filesToUpload.isEmpty {
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        isImporting = true
+                        Task { @MainActor in
+                            await model.uploadMultipleFiles(filesToUpload, directoryId: dirId)
+                            isImporting = false
+                        }
+                    } else if let lastReadError {
+                        model.errorMessage = "Échec de lecture du fichier : \(lastReadError)"
                     }
                 case .failure(let error):
                     model.errorMessage = "Importation impossible : \(error.localizedDescription)"
@@ -640,6 +647,7 @@ private struct FileImportersModifier: ViewModifier {
             }
     }
 }
+
 
 private struct FileOverlaysModifier: ViewModifier {
     @ObservedObject var model: FileListModel
