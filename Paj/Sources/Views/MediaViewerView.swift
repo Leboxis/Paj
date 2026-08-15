@@ -2,9 +2,9 @@ import SwiftUI
 import AVKit
 import UIKit
 
-/// Visionneuse plein écran : balayage horizontal entre médias (TabView page),
-/// zoom sur les photos, streaming vidéo via URL temporaire kdrive.
-/// La fermeture se fait par une croix intégrée en haut à droite du lecteur.
+/// Visionneuse plein écran : barre supérieure placée au-dessus du média,
+/// clic sur le titre pour copier le nom dans le presse-papier avec confirmation visuelle,
+/// balayage horizontal entre médias (TabView page), zoom sur les photos, streaming vidéo via URL temporaire.
 struct MediaViewerView: View {
     let items: [FileItem]
     @Binding var index: Int
@@ -12,6 +12,7 @@ struct MediaViewerView: View {
 
     @State private var shareUrl: URL?
     @State private var isSharing = false
+    @State private var showCopiedBanner = false
 
     private var currentItem: FileItem? {
         guard items.indices.contains(index) else { return nil }
@@ -19,7 +20,70 @@ struct MediaViewerView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 0) {
+            // Barre supérieure au-dessus du média
+            HStack(spacing: 12) {
+                if let item = currentItem {
+                    Button {
+                        UIPasteboard.general.string = item.name
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCopiedBanner = true
+                        }
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCopiedBanner = false
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(item.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.white.opacity(0.15)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Copier le nom du fichier")
+                }
+
+                Spacer()
+
+                Button {
+                    prepareAndShare()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color.white.opacity(0.15)))
+                }
+                .accessibilityLabel("Partager")
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color.white.opacity(0.15)))
+                }
+                .accessibilityLabel("Fermer")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.black)
+
+            // Contenu du média
             TabView(selection: $index) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { position, item in
                     MediaPage(item: item)
@@ -27,49 +91,27 @@ struct MediaViewerView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-
-            // Barre supérieure translucide
-            HStack {
-                if let item = currentItem {
-                    Text(item.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .shadow(radius: 4)
-                }
-                Spacer()
-
-                Button {
-                    prepareAndShare()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(9)
-                        .background(Circle().fill(Color.black.opacity(0.5)))
-                        .contentShape(Circle())
-                }
-                .padding(.trailing, 8)
-                .accessibilityLabel("Partager")
-
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(9)
-                        .background(Circle().fill(Color.black.opacity(0.5)))
-                        .contentShape(Circle())
-                }
-                .accessibilityLabel("Fermer")
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .background(Color.black)
         }
         .background(Color.black.ignoresSafeArea())
+        .overlay(alignment: .top) {
+            if showCopiedBanner {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Titre copié !")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Color.black.opacity(0.88)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                .shadow(radius: 6)
+                .padding(.top, 56)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .sheet(isPresented: Binding(get: { shareUrl != nil },
                                     set: { if !$0 { shareUrl = nil } })) {
             if let url = shareUrl {
@@ -94,7 +136,6 @@ struct MediaViewerView: View {
         }
     }
 }
-
 
 private struct MediaPage: View {
     let item: FileItem

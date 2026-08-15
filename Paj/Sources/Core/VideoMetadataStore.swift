@@ -2,7 +2,7 @@ import SwiftUI
 import AVFoundation
 import UniformTypeIdentifiers
 
-enum VideoOrientation: String, CaseIterable, Identifiable {
+enum VideoOrientation: String, CaseIterable, Identifiable, Codable {
     case landscape
     case portrait
     case square
@@ -18,6 +18,11 @@ enum VideoOrientation: String, CaseIterable, Identifiable {
     }
 }
 
+private struct CachedVideoMetadata: Codable {
+    var durations: [String: Double] = [:]
+    var orientations: [String: String] = [:]
+}
+
 @MainActor
 final class VideoMetadataStore: ObservableObject {
     static let shared = VideoMetadataStore()
@@ -26,6 +31,13 @@ final class VideoMetadataStore: ObservableObject {
     @Published private var orientations: [Int: VideoOrientation] = [:]
 
     private var inFlight: Set<Int> = []
+    private let cacheURL: URL
+
+    private init() {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        cacheURL = caches.appendingPathComponent("paj_video_metadata.json")
+        loadFromDisk()
+    }
 
     func duration(for fileId: Int) -> Double? {
         durations[fileId]
@@ -46,18 +58,21 @@ final class VideoMetadataStore: ObservableObject {
     func register(fileId: Int, imageWidth: CGFloat, imageHeight: CGFloat) {
         guard orientations[fileId] == nil else { return }
         let ratio = imageWidth / max(imageHeight, 1)
+        let orientation: VideoOrientation
         if ratio > 1.15 {
-            orientations[fileId] = .landscape
+            orientation = .landscape
         } else if ratio < 0.87 {
-            orientations[fileId] = .portrait
+            orientation = .portrait
         } else {
-            orientations[fileId] = .square
+            orientation = .square
         }
+        orientations[fileId] = orientation
+        saveToDisk()
     }
 
     func loadMetadata(for item: FileItem) {
         guard item.isVideo else { return }
-        guard durations[item.id] == nil || orientations[item.id] == nil else { return }
+        if durations[item.id] != nil && orientations[item.id] != nil { return }
         guard !inFlight.contains(item.id) else { return }
         inFlight.insert(item.id)
 
@@ -66,10 +81,13 @@ final class VideoMetadataStore: ObservableObject {
             guard let url = try? await KDriveClient.shared.temporaryUrl(for: item) else { return }
             let asset = AVURLAsset(url: url)
 
+            var newDuration: Double?
+            var newOrientation: VideoOrientation?
+
             if let duration = try? await asset.load(.duration) {
                 let seconds = CMTimeGetSeconds(duration)
                 if seconds.isFinite && seconds > 0 {
-                    durations[item.id] = seconds
+                    newDuration = seconds
                 }
             }
 
@@ -81,13 +99,56 @@ final class VideoMetadataStore: ObservableObject {
                     let h = abs(transformedSize.height)
                     let ratio = w / max(h, 1)
                     if ratio > 1.15 {
-                        orientations[item.id] = .landscape
+                        newOrientation = .landscape
                     } else if ratio < 0.87 {
-                        orientations[item.id] = .portrait
+                        newOrientation = .portrait
                     } else {
-                        orientations[item.id] = .square
+                        newOrientation = .square
                     }
                 }
+            }
+
+            if let d = newDuration {
+                self.durations[item.id] = d
+            }
+            if let o = newOrientation {
+                self.orientations[item.id] = o
+            }
+            if newDuration != nil || newOrientation != nil {
+                self.saveToDisk()
+            }
+        }
+    }
+
+    private func loadFromDisk() {
+        guard let data = try? Data(contentsOf: cacheURL),
+              let cached = try? JSONDecoder().decode(CachedVideoMetadata.self, from: data) else {
+            return
+        }
+        for (k, v) in cached.durations {
+            if let id = Int(k) {
+                durations[id] = v
+            }
+        }
+        for (k, v) in cached.orientations {
+            if let id = Int(k), let o = VideoOrientation(rawValue: v) {
+                orientations[id] = o
+            }
+        }
+    }
+
+    private func saveToDisk() {
+        var cached = CachedVideoMetadata()
+        for (k, v) in durations {
+            cached.durations[String(k)] = v
+        }
+        for (k, v) in orientations {
+            cached.orientations[String(k)] = v.rawValue
+        }
+        let url = cacheURL
+        Task.detached(priority: .background) {
+            if let data = try? JSONEncoder().encode(cached) {
+                try? data.write(to: url, options: .atomic)
             }
         }
     }

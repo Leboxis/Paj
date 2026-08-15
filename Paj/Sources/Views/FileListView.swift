@@ -89,64 +89,62 @@ struct FileListView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            orientationFilterBar
-            listContent
-        }
-        .searchable(text: $searchQuery, prompt: "Rechercher sur le drive…")
-        .toolbar { toolbarContent }
-        .refreshable { await model.refresh() }
-        .task { await model.loadFirstPageIfNeeded() }
-        .onChange(of: sortField) { _, _ in reloadForSort() }
-        .onChange(of: sortAscending) { _, _ in reloadForSort() }
-        .onChange(of: searchQuery) { _, query in handleSearchChange(query) }
-        .modifier(FileSheetsModifier(
-            viewerShown: $viewerShown,
-            viewerIndex: $viewerIndex,
-            infoItem: $infoItem,
-            textItem: $textItem,
-            moveTargets: $moveTargets,
-            tagItems: $tagItems,
-            downloadFileUrl: $downloadFileUrl,
-            showingFileImporter: $showingFileImporter,
-            currentDirectoryId: currentDirectoryId,
-            isImporting: $isImporting,
-            model: model,
-            selection: selection
-        ))
-        .modifier(FileAlertsModifier(
-            showingNewFolder: $showingNewFolder,
-            newFolderName: $newFolderName,
-            renamingItem: $renamingItem,
-            newName: $newName,
-            deletingItem: $deletingItem,
-            confirmingDeleteSelection: $confirmingDeleteSelection,
-            currentDirectoryId: currentDirectoryId,
-            model: model,
-            selection: selection,
-            deleteSelectionAction: deleteSelection
-        ))
-        .modifier(FilePhotosImporterModifier(
-            showingPhotosPicker: $showingPhotosPicker,
-            selectedPhotoItems: $selectedPhotoItems,
-            isImporting: $isImporting,
-            currentDirectoryId: currentDirectoryId,
-            model: model
-        ))
-        .modifier(FileOverlaysModifier(
-            model: model,
-            displayedCount: displayedItems.count,
-            selectionActive: selection.isActive,
-            searchQuery: searchQuery,
-            isDownloading: isDownloading,
-            isImporting: isImporting
-        ))
+        listContent
+            .searchable(text: $searchQuery, prompt: "Rechercher sur le drive…")
+            .toolbar { toolbarContent }
+            .refreshable { await model.refresh() }
+            .task { await model.loadFirstPageIfNeeded() }
+            .onChange(of: sortField) { _, _ in reloadForSort() }
+            .onChange(of: sortAscending) { _, _ in reloadForSort() }
+            .onChange(of: searchQuery) { _, query in handleSearchChange(query) }
+            .modifier(FileSheetsModifier(
+                viewerShown: $viewerShown,
+                viewerIndex: $viewerIndex,
+                infoItem: $infoItem,
+                textItem: $textItem,
+                moveTargets: $moveTargets,
+                tagItems: $tagItems,
+                downloadFileUrl: $downloadFileUrl,
+                showingFileImporter: $showingFileImporter,
+                currentDirectoryId: currentDirectoryId,
+                isImporting: $isImporting,
+                model: model,
+                selection: selection
+            ))
+            .modifier(FileAlertsModifier(
+                showingNewFolder: $showingNewFolder,
+                newFolderName: $newFolderName,
+                renamingItem: $renamingItem,
+                newName: $newName,
+                deletingItem: $deletingItem,
+                confirmingDeleteSelection: $confirmingDeleteSelection,
+                currentDirectoryId: currentDirectoryId,
+                model: model,
+                selection: selection,
+                deleteSelectionAction: deleteSelection
+            ))
+            .modifier(FilePhotosImporterModifier(
+                showingPhotosPicker: $showingPhotosPicker,
+                selectedPhotoItems: $selectedPhotoItems,
+                isImporting: $isImporting,
+                currentDirectoryId: currentDirectoryId,
+                model: model
+            ))
+            .modifier(FileOverlaysModifier(
+                model: model,
+                displayedCount: displayedItems.count,
+                selectionActive: selection.isActive,
+                searchQuery: searchQuery,
+                isDownloading: isDownloading,
+                isImporting: isImporting
+            ))
     }
 
-    // MARK: - Filtre d'orientation vidéo (boutons icônes simples sans texte)
+    // MARK: - Filtre d'orientation vidéo (boutons icônes centrés sans texte)
 
     private var orientationFilterBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
+            Spacer()
             ForEach(VideoOrientation.allCases) { orientation in
                 Button {
                     withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
@@ -176,8 +174,9 @@ struct FileListView: View {
             Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
     }
+
 
     private func handleSearchChange(_ query: String) {
         let words = query.components(separatedBy: .whitespacesAndNewlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -309,16 +308,24 @@ struct FileListView: View {
     private var listContent: some View {
         if gridView {
             ScrollView {
+                orientationFilterBar
                 LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(displayedItems) { item in
                         gridCell(item)
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
                 footer
             }
         } else {
             List {
+                Section {
+                    orientationFilterBar
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+
                 ForEach(displayedItems) { item in
                     row(item)
                 }
@@ -327,6 +334,7 @@ struct FileListView: View {
             .listStyle(.insetGrouped)
         }
     }
+
 
     @ViewBuilder
     private var footer: some View {
