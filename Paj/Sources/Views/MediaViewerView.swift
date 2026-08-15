@@ -111,14 +111,14 @@ private struct PhotoPage: View {
 private struct VideoPage: View {
     let item: FileItem
 
-    @State private var url: URL?
+    @State private var player: AVPlayer?
     @State private var errorText: String?
 
     var body: some View {
         ZStack {
             Color.black
-            if let url {
-                PlayerContainer(url: url)
+            if let player {
+                PlayerContainer(player: player)
             } else if let errorText {
                 VStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle")
@@ -135,9 +135,18 @@ private struct VideoPage: View {
                     .tint(.white)
             }
         }
+        // L'audio s'arrête dès qu'on quitte la page (swipe ou fermeture).
+        .onDisappear {
+            player?.pause()
+        }
         .task(id: item.id) {
+            guard player == nil else { return }
             do {
-                url = try await KDriveClient.shared.temporaryUrl(for: item)
+                let url = try await KDriveClient.shared.temporaryUrl(for: item)
+                guard !Task.isCancelled else { return }
+                let newPlayer = AVPlayer(url: url)
+                player = newPlayer
+                newPlayer.play()
             } catch {
                 errorText = error.localizedDescription
             }
@@ -146,14 +155,12 @@ private struct VideoPage: View {
 }
 
 private struct PlayerContainer: UIViewControllerRepresentable {
-    let url: URL
+    let player: AVPlayer
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
-        let player = AVPlayer(url: url)
         controller.player = player
         controller.videoGravity = .resizeAspect
-        player.play()
         return controller
     }
 

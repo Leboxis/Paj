@@ -1,8 +1,10 @@
 import Foundation
 
 /// Liste de fichiers paginée par curseur, partagée par tous les onglets.
-/// Chaque opération (loadMore, refresh) est un Task indépendant : aucun appel
-/// ne bloque les autres. Le refresh annule les chargements en cours proprement.
+/// Concurrency : `isLoading` est posé de façon synchrone (pas de double
+/// chargement), remis à zéro par `defer` (jamais coincé après une
+/// annulation), et le refresh annule proprement le chargement en cours
+/// puis attend la fin du nouveau.
 @MainActor
 final class FileListModel: ObservableObject {
     @Published var items: [FileItem] = []
@@ -23,59 +25,64 @@ final class FileListModel: ObservableObject {
 
     func setLoaderAndReload(_ newLoader: @escaping (String?) async throws -> Page<FileItem>) {
         loader = newLoader
-        refresh()
+        Task { await refresh() }
     }
 
-    func loadFirstPageIfNeeded() {
+    func loadFirstPageIfNeeded() async {
         guard items.isEmpty && loadTask == nil else { return }
-        loadMore()
+        await loadMore()
     }
 
-    func refresh() {
+    func refresh() async {
         loadTask?.cancel()
+        isLoading = false
+        cursor = nil
+        hasMore = true
+        items.removeAll()
+        await loadMore()
+        // Attendre la fin réelle du chargement : le spinner de
+        // pull-to-refresh accompagne le rechargement complet.
+        _ = await loadTask?.value
+    }
+
+    func loadMore() async {
+        guard !isLoading else { return }
+        isLoading = true
         loadTask = Task {
-            guard !Task.isCancelled else { return }
-            cursor = nil
-            hasMore = true
-            items.removeAll()
-            await loadMore()
+            await performLoad()
         }
     }
 
-    func loadMore() {
-        loadTask?.cancel()
-        loadTask = Task {
+    private func performLoad() async {
+        defer { isLoading = false }
+        do {
+            let page = try await loader(cursor)
             guard !Task.isCancelled else { return }
-            isLoading = true
-            do {
-                let page = try await loader(cursor)
-                guard !Task.isCancelled else { return }
-                var merged = items
-                merged.append(contentsOf: page.data ?? [])
-                // Dossiers toujours en tête, ordre relatif conservé,
-                // quel que soit le mode de tri demandé.
-                items = merged.filter { $0.isDirectory } + merged.filter { !$0.isDirectory }
-                cursor = page.cursor
-                hasMore = page.hasMore ?? !((page.cursor ?? "").isEmpty)
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
+            var merged = items
+            merged.append(contentsOf: page.data ?? [])
+            // Dossiers toujours en tête, ordre relatif conservé,
+            // quel que soit le mode de tri demandé.
+            items = merged.filter { $0.isDirectory } + merged.filter { !$0.isDirectory }
+            cursor = page.cursor
+            hasMore = page.hasMore ?? !((page.cursor ?? "").isEmpty)
+        } catch is CancellationError {
+            return
+        } catch {
+            if !Task.isCancelled {
                 errorMessage = error.localizedDescription
             }
-            isLoading = false
         }
     }
 
     /// Préchargement : déclenché quand la ligne affichée approche de la fin.
-    func loadMoreIfNeeded(current: FileItem) {
+    func loadMoreIfNeeded(current: FileItem) async {
         guard canLoadMore, !items.isEmpty,
               let idx = items.firstIndex(where: { $0.id == current.id }),
               items.count - idx <= 15 else { return }
-        loadMore()
+        await loadMore()
     }
 
-    // MARK: - Mutations locales + serveur
+    // MARK: - Mutations serveur
 
     /// Favori piloté par le serveur : appel API puis resynchronisation de la
     /// liste — aucun état local de favori dans l'app.
@@ -144,7 +151,7 @@ final class FileListModel: ObservableObject {
             if failures > 0 {
                 errorMessage = "\(failures) échec(s) sur \(batch.count) — \(label)."
             }
-            refresh()
+            await refresh()
         }
     }
 }

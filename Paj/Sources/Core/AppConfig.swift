@@ -7,14 +7,30 @@ import Security
 enum AppConfig {
     private static let service = "com.paj.drive"
 
+    // Cache mémoire : le trousseau est coûteux (SecItemCopyMatching) et le
+    // token est lu à CHAQUE requête API — y compris pour chaque miniature.
+    private static let cacheLock = NSLock()
+    private static var tokenCache: String?
+    private static var driveIdCache: Int?
+
     // MARK: - Lecture
 
     static var token: String {
-        keychainGet("token") ?? infoValue("KDriveAPIToken") ?? ""
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cached = tokenCache { return cached }
+        let value = keychainGet("token") ?? infoValue("KDriveAPIToken") ?? ""
+        tokenCache = value
+        return value
     }
 
     static var driveId: Int {
-        Int(keychainGet("driveId") ?? "") ?? Int(infoValue("KDriveDriveId") ?? "") ?? 0
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cached = driveIdCache { return cached }
+        let value = Int(keychainGet("driveId") ?? "") ?? Int(infoValue("KDriveDriveId") ?? "") ?? 0
+        driveIdCache = value
+        return value
     }
 
     static var accessCode: String {
@@ -36,6 +52,7 @@ enum AppConfig {
         keychainSet(driveId, forKey: "driveId")
         keychainSet(accessCode, forKey: "accessCode")
         keychainSet(rootId, forKey: "rootId")
+        invalidateCache()
     }
 
     static func reset() {
@@ -43,6 +60,14 @@ enum AppConfig {
         keychainSet(nil, forKey: "driveId")
         keychainSet(nil, forKey: "accessCode")
         keychainSet(nil, forKey: "rootId")
+        invalidateCache()
+    }
+
+    private static func invalidateCache() {
+        cacheLock.lock()
+        tokenCache = nil
+        driveIdCache = nil
+        cacheLock.unlock()
     }
 
     // MARK: - Privé

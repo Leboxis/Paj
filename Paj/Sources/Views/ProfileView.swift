@@ -146,7 +146,7 @@ struct ProfileThumb: View {
     var body: some View {
         ZStack {
             if item.isMedia {
-                RemoteThumbnail(file: item, width: 132, height: 132, corner: 8)
+                RemoteThumbnail(file: item, width: 200, height: 200, corner: 8)
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(.systemGray5).opacity(0.4))

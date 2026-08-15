@@ -1,10 +1,13 @@
 import UIKit
 import SwiftUI
 
-/// Cache de miniatures à deux niveaux : NSCache (mémoire) + répertoire disque
-/// plafonné (~250 Mo, éviction par plus ancien). La miniature est demandée au
-/// serveur à la taille exacte de la cellule : le sous-échantillonnage est fait
-/// côté kdrive, ce qui garde le défilement à 120 Hz.
+/// Cache de miniatures à deux niveaux : NSCache (mémoire, plafonnée par
+/// coût en pixels décodés) + répertoire disque plafonné (~250 Mo, éviction
+/// par plus ancien). La miniature est demandée au serveur à la taille exacte
+/// de la cellule : le sous-échantillonnage est fait côté kdrive, ce qui
+/// garde le défilement à 120 Hz. Les requêtes concurrentes pour la même
+/// clé sont dédupliquées, et lecture disque/décodage se font hors thread
+/// principal.
 final class ThumbnailStore {
     static let shared = ThumbnailStore()
 
@@ -12,25 +15,62 @@ final class ThumbnailStore {
     private let diskDir: URL
     private let ioQueue = DispatchQueue(label: "com.paj.thumbs.io")
     private let maxDiskBytes = 250 * 1024 * 1024
+    private let maxMemoryBytes = 120 * 1024 * 1024
+
+    // Requêtes en cours (dédup pendant le scroll rapide).
+    private let inFlightLock = NSLock()
+    private var inFlight: [String: Task<UIImage?, Never>] = [:]
 
     private init() {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         diskDir = base.appendingPathComponent("thumbnails", isDirectory: true)
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)
-        memory.countLimit = 800
+        memory.totalCostLimit = maxMemoryBytes
+        memory.countLimit = 1500
     }
 
     func image(forKey key: String, fetch: @escaping () async throws -> Data) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
 
+        inFlightLock.lock()
+        let existing = inFlight[key]
+        var started: Task<UIImage?, Never>?
+        if existing == nil {
+            started = Task { [weak self] () -> UIImage? in
+                guard let self else { return nil }
+                return await self.loadFromDiskOrFetch(key: key, fetch: fetch)
+            }
+            inFlight[key] = started
+        }
+        inFlightLock.unlock()
+
+        if let existing {
+            return await existing.value
+        }
+        guard let started else { return nil }
+        let result = await started.value
+        inFlightLock.lock()
+        inFlight[key] = nil
+        inFlightLock.unlock()
+        return result
+    }
+
+    private func loadFromDiskOrFetch(key: String, fetch: @escaping () async throws -> Data) async -> UIImage? {
         let url = diskDir.appendingPathComponent(Self.safeName(key))
-        if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
-            memory.setObject(img, forKey: key as NSString)
-            return img
+        // Lecture disque + décodage hors du thread principal (fluidité).
+        if let cached = await Task.detached(priority: .utility) { () -> UIImage? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }.value {
+            memory.setObject(cached, forKey: key as NSString, cost: Self.pixelCost(of: cached))
+            return cached
         }
 
-        guard let data = try? await fetch(), !data.isEmpty, let img = UIImage(data: data) else { return nil }
-        memory.setObject(img, forKey: key as NSString)
+        guard let data = try? await fetch(), !data.isEmpty,
+              let image = await Task.detached(priority: .utility) { UIImage(data: data) }.value else {
+            return nil
+        }
+        memory.setObject(image, forKey: key as NSString, cost: Self.pixelCost(of: image))
 
         let dir = diskDir
         let limit = maxDiskBytes
@@ -38,7 +78,7 @@ final class ThumbnailStore {
             try? data.write(to: url, options: .atomic)
             Self.trimDisk(dir: dir, maxBytes: limit)
         }
-        return img
+        return image
     }
 
     func clearAll() {
@@ -56,6 +96,12 @@ final class ThumbnailStore {
             sum + ((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
         }
         return ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file)
+    }
+
+    /// Coût mémoire réel de l'image décodée (octets de pixels).
+    private static func pixelCost(of image: UIImage) -> Int {
+        guard let cg = image.cgImage else { return 0 }
+        return cg.bytesPerRow * cg.height
     }
 
     private static func trimDisk(dir: URL, maxBytes: Int) {
