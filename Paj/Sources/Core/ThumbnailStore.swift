@@ -100,7 +100,7 @@ struct RemoteThumbnail: View {
         // overlay remplit et est rognée — taille identique quel que soit le
         // ratio d'origine (photo portrait, vidéo horizontale…).
         Rectangle()
-            .fill(Color(.systemGray5))
+            .fill(Color(.systemGray5).opacity(0.4))
             .overlay {
                 if let image {
                     Image(uiImage: image)

@@ -5,6 +5,7 @@ import SwiftUI
 extension FileItem {
     var systemImage: String {
         if isDirectory { return "folder.fill" }
+        if isTextFile { return "doc.text" }
         switch extensionType ?? "" {
         case "image": return "photo"
         case "video": return "film"
@@ -35,10 +36,14 @@ struct FileIcon: View {
     let item: FileItem
     var size: CGFloat = 26
 
-    /// Couleur réelle du dossier dans kdrive (bleu kdrive par défaut).
+    /// Couleur réelle du dossier dans kdrive (bleu kdrive par défaut),
+    /// bleu pour les fichiers texte.
     private var iconColor: Color {
         if item.isDirectory {
             return Color(hex: item.color) ?? Color(hex: "#0098FF")!
+        }
+        if item.isTextFile {
+            return .accentColor
         }
         return Color.secondary
     }
@@ -137,8 +142,8 @@ struct FileGridCell: View {
                     RemoteThumbnail(file: item, width: 400, height: 400, corner: 8)
                 } else {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.systemGray5))
-                        .overlay(FileIcon(item: item, size: 30))
+                        .fill(Color(.systemGray5).opacity(0.4))
+                        .overlay(FileIcon(item: item, size: 40))
                 }
                 if item.isVideo {
                     Image(systemName: "play.circle.fill")

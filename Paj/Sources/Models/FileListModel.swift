@@ -77,14 +77,14 @@ final class FileListModel: ObservableObject {
 
     // MARK: - Mutations locales + serveur
 
+    /// Favori piloté par le serveur : appel API puis resynchronisation de la
+    /// liste — aucun état local de favori dans l'app.
     func toggleFavorite(_ item: FileItem) {
         let favorite = !(item.isFavorite ?? false)
-        if let idx = items.firstIndex(where: { $0.id == item.id }) {
-            items[idx].isFavorite = favorite
-        }
         Task {
             do {
                 try await KDriveClient.shared.setFavorite(item, favorite: favorite)
+                await refresh()
             } catch {
                 errorMessage = error.localizedDescription
             }

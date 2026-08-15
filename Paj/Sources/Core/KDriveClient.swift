@@ -79,7 +79,7 @@ final class KDriveClient {
     func listDirectory(id: Int, cursor: String?, orderBy: String, order: String, directoriesOnly: Bool = false) async throws -> Page<FileItem> {
         var extra = [
             URLQueryItem(name: "limit", value: "100"),
-            URLQueryItem(name: "with", value: "categories")
+            URLQueryItem(name: "with", value: "categories,is_favorite")
         ]
         if !orderBy.isEmpty && orderBy != "original" {
             extra.append(URLQueryItem(name: "order_by", value: orderBy))
@@ -94,7 +94,7 @@ final class KDriveClient {
     func favorites(cursor: String?, orderBy: String, order: String, limit: Int = 100) async throws -> Page<FileItem> {
         var extra = [
             URLQueryItem(name: "limit", value: String(max(limit, 5))),
-            URLQueryItem(name: "with", value: "categories")
+            URLQueryItem(name: "with", value: "categories,is_favorite")
         ]
         if !orderBy.isEmpty && orderBy != "original" {
             extra.append(URLQueryItem(name: "order_by", value: orderBy))
@@ -108,7 +108,7 @@ final class KDriveClient {
     func lastModifiedFiles(cursor: String?, limit: Int = 12) async throws -> Page<FileItem> {
         try await get("3/drive/\(AppConfig.driveId)/files/last_modified", query: Self.paginationQuery(cursor: cursor, extra: [
             URLQueryItem(name: "limit", value: String(max(limit, 5))),
-            URLQueryItem(name: "with", value: "categories")
+            URLQueryItem(name: "with", value: "categories,is_favorite")
         ]))
     }
 
@@ -116,7 +116,7 @@ final class KDriveClient {
     func filesInCategory(_ categoryId: Int, cursor: String?) async throws -> Page<FileItem> {
         try await get("3/drive/\(AppConfig.driveId)/files/search", query: Self.paginationQuery(cursor: cursor, extra: [
             URLQueryItem(name: "category", value: String(categoryId)),
-            URLQueryItem(name: "with", value: "categories"),
+            URLQueryItem(name: "with", value: "categories,is_favorite"),
             URLQueryItem(name: "order_by", value: "last_modified_at"),
             URLQueryItem(name: "order", value: "desc"),
             URLQueryItem(name: "limit", value: "100")
@@ -218,7 +218,8 @@ final class KDriveClient {
 
     func trash(cursor: String?) async throws -> Page<FileItem> {
         try await get("3/drive/\(AppConfig.driveId)/trash", query: Self.paginationQuery(cursor: cursor, extra: [
-            URLQueryItem(name: "limit", value: "100")
+            URLQueryItem(name: "limit", value: "100"),
+            URLQueryItem(name: "with", value: "categories,is_favorite")
         ]))
     }
 

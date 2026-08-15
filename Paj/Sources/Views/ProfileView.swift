@@ -149,8 +149,8 @@ struct ProfileThumb: View {
                 RemoteThumbnail(file: item, width: 132, height: 132, corner: 8)
             } else {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.systemGray5))
-                    .overlay(FileIcon(item: item, size: 20))
+                    .fill(Color(.systemGray5).opacity(0.4))
+                    .overlay(FileIcon(item: item, size: 24))
             }
             if item.isVideo {
                 Image(systemName: "play.circle.fill")

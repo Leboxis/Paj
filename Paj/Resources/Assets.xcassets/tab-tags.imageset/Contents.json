@@ -2,7 +2,18 @@
   "images": [
     {
       "filename": "tab-tags.png",
-      "idiom": "universal"
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "tab-tags@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "tab-tags@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {

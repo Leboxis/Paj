@@ -131,7 +131,7 @@ enum SortField: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .original: return "Original (kdrive)"
+        case .original: return "Original"
         case .name: return "Nom"
         case .lastModified: return "Date de modification"
         case .size: return "Taille"
