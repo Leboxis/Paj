@@ -24,7 +24,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Sécurité") {
+                Section {
                     Button {
                         appState.lock()
                     } label: {
@@ -35,6 +35,8 @@ struct SettingsView: View {
                     } label: {
                         Label("Modifier token / code / drive", systemImage: "key")
                     }
+                } header: {
+                    Text("Sécurité")
                 } footer: {
                     Text("L'app se verrouille automatiquement à chaque passage en arrière-plan.")
                 }
