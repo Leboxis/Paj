@@ -63,6 +63,8 @@ struct FileRow: View {
     var selecting = false
     var subtitleText: String? = nil
 
+    @ObservedObject private var categoryStore = CategoryStore.shared
+
     var body: some View {
         HStack(spacing: 10) {
             if item.isMedia {
@@ -91,7 +93,7 @@ struct FileRow: View {
             HStack(spacing: 3) {
                 ForEach(item.tagIDs.prefix(4), id: \.self) { tagID in
                     Circle()
-                        .fill(CategoryStore.shared.color(forCategoryID: tagID))
+                        .fill(categoryStore.color(forCategoryID: tagID))
                         .frame(width: 7, height: 7)
                 }
             }
@@ -135,6 +137,8 @@ struct SelectionBadge: View {
 struct FileGridCell: View {
     let item: FileItem
 
+    @ObservedObject private var categoryStore = CategoryStore.shared
+
     var body: some View {
         VStack(spacing: 5) {
             ZStack {
@@ -158,7 +162,7 @@ struct FileGridCell: View {
                     HStack(spacing: 3) {
                         ForEach(item.tagIDs.prefix(3), id: \.self) { tagID in
                             Circle()
-                                .fill(CategoryStore.shared.color(forCategoryID: tagID))
+                                .fill(categoryStore.color(forCategoryID: tagID))
                                 .frame(width: 8, height: 8)
                                 .overlay(Circle().strokeBorder(.white, lineWidth: 1))
                         }
@@ -194,6 +198,8 @@ struct FileInfoSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var temporaryUrl: URL?
+    @State private var isFetchingUrl = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -215,14 +221,25 @@ struct FileInfoSheet: View {
                 if !item.isDirectory {
                     Section {
                         Button {
-                            Task {
-                                temporaryUrl = try? await KDriveClient.shared.temporaryUrl(for: item)
-                            }
+                            openTemporaryUrl()
                         } label: {
-                            Label("Ouvrir via URL temporaire", systemImage: "safari")
+                            HStack {
+                                Label("Ouvrir via URL temporaire", systemImage: "safari")
+                                Spacer()
+                                if isFetchingUrl {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(isFetchingUrl)
+
+                        if let url = temporaryUrl {
+                            ShareLink(item: url) {
+                                Label("Partager le lien", systemImage: "square.and.arrow.up")
+                            }
                         }
                     } footer: {
-                        Text("Ouvre le fichier dans un lecteur externe via un lien signé valable 1 h.")
+                        Text("Ouvre ou partage le fichier via un lien signé valable 1 h.")
                     }
                 }
             }
@@ -231,11 +248,27 @@ struct FileInfoSheet: View {
             .toolbar {
                 Button("Fermer") { dismiss() }
             }
-            .onChange(of: temporaryUrl) { _, newValue in
-                if let url = newValue {
-                    UIApplication.shared.open(url)
-                }
+            .alert("Erreur", isPresented: Binding(get: { errorMessage != nil },
+                                                  set: { if !$0 { errorMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
             }
+        }
+    }
+
+    private func openTemporaryUrl() {
+        isFetchingUrl = true
+        errorMessage = nil
+        Task { @MainActor in
+            do {
+                let url = try await KDriveClient.shared.temporaryUrl(for: item)
+                temporaryUrl = url
+                UIApplication.shared.open(url)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isFetchingUrl = false
         }
     }
 }

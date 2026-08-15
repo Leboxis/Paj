@@ -6,7 +6,7 @@ import SwiftUI
 final class CategoryStore: ObservableObject {
     static let shared = CategoryStore()
 
-    private(set) var categories: [KCategory] = []
+    @Published private(set) var categories: [KCategory] = []
     private var loaded = false
 
     func loadIfNeeded(force: Bool = false) async {

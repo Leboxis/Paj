@@ -45,9 +45,15 @@ struct LockScreenView: View {
             Spacer()
         }
         .padding()
-        .onAppear { focused = true }
+        .onAppear {
+            if biometricsAvailable {
+                biometricUnlock()
+            } else {
+                focused = true
+            }
+        }
         .onChange(of: code) { _, newValue in
-            if newValue.count >= expectedLength {
+            if !AppConfig.accessCode.isEmpty && newValue.count >= expectedLength {
                 tryUnlock()
             }
         }
@@ -55,7 +61,7 @@ struct LockScreenView: View {
 
     private func tryUnlock() {
         let expected = AppConfig.accessCode
-        if !expected.isEmpty && code == expected {
+        if expected.isEmpty || code == expected {
             code = ""
             failed = false
             appState.unlock()
@@ -69,7 +75,11 @@ struct LockScreenView: View {
         let context = LAContext()
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Déverrouiller Paj") { success, _ in
             DispatchQueue.main.async {
-                if success { appState.unlock() }
+                if success {
+                    appState.unlock()
+                } else {
+                    focused = true
+                }
             }
         }
     }

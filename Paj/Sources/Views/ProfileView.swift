@@ -111,7 +111,7 @@ struct ProfileView: View {
 
     private func sectionRow(items: [FileItem]) -> some View {
         HStack(spacing: 8) {
-            ForEach(items.filter { $0.isMedia }.prefix(3)) { item in
+            ForEach(items.prefix(3)) { item in
                 ProfileThumb(item: item)
             }
             if items.isEmpty {

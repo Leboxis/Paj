@@ -123,6 +123,15 @@ final class KDriveClient {
         ]))
     }
 
+    /// Recherche globale de fichiers par mot-clé sur l'ensemble du drive.
+    func searchFiles(query: String, cursor: String?) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/files/search", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "with", value: "categories,is_favorite"),
+            URLQueryItem(name: "limit", value: "100")
+        ]))
+    }
+
     func driveInfo() async throws -> DriveInfo {
         struct Resp: Decodable { let data: DriveInfo? }
         let resp: Resp = try await get("2/drive/\(AppConfig.driveId)")
@@ -156,6 +165,42 @@ final class KDriveClient {
         _ = try await performJSON("3/drive/\(AppConfig.driveId)/files/\(item.id)/move/\(directoryId)",
                                   method: "POST",
                                   body: ["conflict": "rename"])
+    }
+
+    /// Création d'un nouveau dossier dans un dossier parent.
+    @discardableResult
+    func createDirectory(name: String, in directoryId: Int, color: String? = nil) async throws -> FileItem {
+        struct Resp: Decodable { let data: FileItem? }
+        var body: [String: Any] = ["name": name]
+        if let color { body["color"] = color }
+        let data = try await performJSON("3/drive/\(AppConfig.driveId)/files/\(directoryId)/directory",
+                                         method: "POST",
+                                         body: body)
+        guard let item = (try? JSONDecoder().decode(Resp.self, from: data))?.data else {
+            throw KDriveError.decoding
+        }
+        return item
+    }
+
+    /// Téléversement d'un nouveau fichier (photo, vidéo, document) dans un dossier.
+    @discardableResult
+    func uploadFile(name: String, data: Data, directoryId: Int) async throws -> FileItem {
+        struct Resp: Decodable { let data: FileItem? }
+        var req = try request(path: "3/drive/\(AppConfig.driveId)/upload", query: [
+            URLQueryItem(name: "directory_id", value: String(directoryId)),
+            URLQueryItem(name: "file_name", value: name),
+            URLQueryItem(name: "total_size", value: String(data.count)),
+            URLQueryItem(name: "conflict", value: "rename"),
+            URLQueryItem(name: "with", value: "categories,is_favorite")
+        ])
+        req.httpMethod = "POST"
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        let resData = try await perform(req)
+        guard let item = (try? JSONDecoder().decode(Resp.self, from: resData))?.data else {
+            throw KDriveError.decoding
+        }
+        return item
     }
 
     // MARK: - Tags (catégories)

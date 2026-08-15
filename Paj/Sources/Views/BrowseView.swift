@@ -34,6 +34,7 @@ struct DirectoryView: View {
         FileListView(
             model: model,
             storageKey: "browse.\(directory.id)",
+            currentDirectoryId: directory.id,
             onOpenDirectory: { item in path.append(item) },
             makeLoader: { orderBy, ascending in
                 { cursor in

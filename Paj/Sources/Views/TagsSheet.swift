@@ -135,6 +135,7 @@ struct TagsSheet: View {
         Task { @MainActor in
             do {
                 try await KDriveClient.shared.setCategory(fileIds: ids, categoryId: categoryId, assign: assign)
+                await CategoryStore.shared.loadIfNeeded(force: true)
                 onDone()
                 dismiss()
             } catch {
@@ -153,6 +154,7 @@ struct TagsSheet: View {
             do {
                 let category = try await KDriveClient.shared.createCategory(name: name, color: color)
                 try await KDriveClient.shared.setCategory(fileIds: ids, categoryId: category.id, assign: true)
+                await CategoryStore.shared.loadIfNeeded(force: true)
                 onDone()
                 dismiss()
             } catch {

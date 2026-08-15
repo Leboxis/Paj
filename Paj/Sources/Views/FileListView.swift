@@ -1,12 +1,15 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 /// Contenu d'onglet générique : liste ou grille (bascule en toolbar), tri
-/// serveur, pagination par curseur, sélection multiple avec barre d'actions
+/// serveur, recherche globale, création de dossiers, import de photos/fichiers,
+/// pagination par curseur, sélection multiple avec barre d'actions
 /// (favori, déplacer, tags, renommer, supprimer), visionneuse plein écran.
-/// Réutilisé par Parcourir, Récents et Favoris.
 struct FileListView: View {
     @ObservedObject var model: FileListModel
     var sortable = true
+    var currentDirectoryId: Int? = nil
     var onOpenDirectory: ((FileItem) -> Void)? = nil
     var makeLoader: (_ orderBy: String, _ ascending: Bool) -> (_ cursor: String?) async throws -> Page<FileItem>
 
@@ -16,6 +19,7 @@ struct FileListView: View {
 
     @StateObject private var selection = SelectionState()
 
+    @State private var searchQuery = ""
     @State private var viewerShown = false
     @State private var viewerIndex = 0
     @State private var infoItem: FileItem?
@@ -27,13 +31,21 @@ struct FileListView: View {
     @State private var moveTargets: [FileItem] = []
     @State private var tagItems: [FileItem] = []
 
+    @State private var showingNewFolder = false
+    @State private var newFolderName = ""
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showingFileImporter = false
+    @State private var shareUrl: URL?
+
     init(model: FileListModel,
          storageKey: String,
          sortable: Bool = true,
+         currentDirectoryId: Int? = nil,
          onOpenDirectory: ((FileItem) -> Void)? = nil,
          makeLoader: @escaping (String, Bool) -> (String?) async throws -> Page<FileItem>) {
         self.model = model
         self.sortable = sortable
+        self.currentDirectoryId = currentDirectoryId
         self.onOpenDirectory = onOpenDirectory
         self.makeLoader = makeLoader
         _gridView = AppStorage(wrappedValue: true, storageKey + ".isGrid")
@@ -51,11 +63,22 @@ struct FileListView: View {
 
     var body: some View {
         listContent
+            .searchable(text: $searchQuery, prompt: "Rechercher sur le drive…")
             .toolbar { toolbarContent }
             .refreshable { await model.refresh() }
             .task { await model.loadFirstPageIfNeeded() }
             .onChange(of: sortField) { _, _ in reloadForSort() }
             .onChange(of: sortAscending) { _, _ in reloadForSort() }
+            .onChange(of: searchQuery) { _, query in
+                let trimmed = query.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    reloadForSort()
+                } else {
+                    model.setLoaderAndReload { cursor in
+                        try await KDriveClient.shared.searchFiles(query: trimmed, cursor: cursor)
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $viewerShown) {
                 MediaViewerView(items: model.items.filter { $0.isMedia }, index: $viewerIndex)
             }
@@ -78,6 +101,25 @@ struct FileListView: View {
                 TagsSheet(items: tagItems) {
                     selection.end()
                     Task { await model.refresh() }
+                }
+            }
+            .sheet(isPresented: Binding(get: { shareUrl != nil },
+                                        set: { if !$0 { shareUrl = nil } })) {
+                if let url = shareUrl {
+                    ShareSheet(activityItems: [url])
+                }
+            }
+            .alert("Nouveau dossier", isPresented: $showingNewFolder) {
+                TextField("Nom du dossier", text: $newFolderName)
+                Button("Annuler", role: .cancel) { newFolderName = "" }
+                Button("Créer") {
+                    let name = newFolderName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                    newFolderName = ""
+                    Task {
+                        await model.createDirectory(name: name, in: dirId)
+                    }
                 }
             }
             .alert("Renommer", isPresented: Binding(get: { renamingItem != nil },
@@ -119,6 +161,35 @@ struct FileListView: View {
             } message: {
                 Text(model.errorMessage ?? "")
             }
+            .fileImporter(isPresented: $showingFileImporter,
+                          allowedContentTypes: [.item],
+                          allowsMultipleSelection: false) { result in
+                switch result {
+                case .success(let url):
+                    guard url.startAccessingSecurityScopedResource() else { return }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    if let data = try? Data(contentsOf: url) {
+                        let name = url.lastPathComponent
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        Task {
+                            await model.uploadFile(name: name, data: data, directoryId: dirId)
+                        }
+                    }
+                case .failure(let error):
+                    model.errorMessage = error.localizedDescription
+                }
+            }
+            .onChange(of: selectedPhotoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        let name = "Upload_\(Int(Date().timeIntervalSince1970)).jpg"
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        await model.uploadFile(name: name, data: data, directoryId: dirId)
+                    }
+                    selectedPhotoItem = nil
+                }
+            }
             .overlay {
                 if model.items.isEmpty && model.isLoading && model.errorMessage == nil {
                     ProgressView()
@@ -126,7 +197,9 @@ struct FileListView: View {
             }
             .overlay {
                 if model.items.isEmpty && !model.isLoading && model.errorMessage == nil && !selection.isActive {
-                    ContentUnavailableView("Vide", systemImage: "tray")
+                    ContentUnavailableView(searchQuery.isEmpty ? "Vide" : "Aucun résultat",
+                                           systemImage: searchQuery.isEmpty ? "tray" : "magnifyingglass",
+                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé pour « \(searchQuery) »"))
                 }
             }
             .overlay {
@@ -191,6 +264,28 @@ struct FileListView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.up.arrow.down")
+                }
+            }
+        }
+        if !selection.isActive && currentDirectoryId != nil {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        newFolderName = ""
+                        showingNewFolder = true
+                    } label: {
+                        Label("Nouveau dossier", systemImage: "folder.badge.plus")
+                    }
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .any(of: [.images, .videos])) {
+                        Label("Importer photo/vidéo", systemImage: "photo.badge.plus")
+                    }
+                    Button {
+                        showingFileImporter = true
+                    } label: {
+                        Label("Importer un fichier…", systemImage: "doc.badge.plus")
+                    }
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
         }
@@ -333,6 +428,17 @@ struct FileListView: View {
         } label: {
             Label(item.isFavorite == true ? "Retirer des favoris" : "Ajouter aux favoris",
                   systemImage: item.isFavorite == true ? "star.slash" : "star")
+        }
+        if !item.isDirectory {
+            Button {
+                Task { @MainActor in
+                    if let url = try? await KDriveClient.shared.temporaryUrl(for: item) {
+                        shareUrl = url
+                    }
+                }
+            } label: {
+                Label("Partager le lien", systemImage: "square.and.arrow.up")
+            }
         }
         Button {
             renamingItem = item

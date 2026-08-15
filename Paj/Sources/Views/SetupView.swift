@@ -4,6 +4,7 @@ import SwiftUI
 /// enregistrées dans le trousseau iOS et testées contre l'API avant validation.
 struct SetupView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
 
     var existing = false
 
@@ -24,7 +25,7 @@ struct SetupView: View {
                     SecureField("Token API Infomaniak", text: $token)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                    TextField("ID du dossier racine (1 par défaut)", text: $rootIdText)
+                    TextField("ID du dossier racine (5 par défaut)", text: $rootIdText)
                         .keyboardType(.numberPad)
                 } header: {
                     Text("Connexion kdrive")
@@ -33,7 +34,7 @@ struct SetupView: View {
                 }
 
                 Section("Code d'accès à l'app") {
-                    TextField("Code (chiffres)", text: $accessCode)
+                    TextField("Code optionnel (chiffres)", text: $accessCode)
                         .keyboardType(.numberPad)
                 }
 
@@ -53,6 +54,21 @@ struct SetupView: View {
             }
             .navigationTitle(existing ? "Modifier la config" : "Bienvenue")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if existing {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Fermer") { dismiss() }
+                    }
+                }
+            }
+            .onAppear {
+                if existing {
+                    token = AppConfig.token
+                    driveIdText = AppConfig.driveId > 0 ? String(AppConfig.driveId) : ""
+                    accessCode = AppConfig.accessCode
+                    rootIdText = String(AppConfig.rootDirectoryId)
+                }
+            }
         }
     }
 
@@ -63,7 +79,7 @@ struct SetupView: View {
         let token = token
         let driveId = driveIdText
         let accessCode = accessCode
-        let rootId = rootIdText
+        let rootId = rootIdText.isEmpty ? "5" : rootIdText
 
         Task { @MainActor in
             AppConfig.save(token: token, driveId: driveId, accessCode: accessCode, rootId: rootId)
@@ -72,6 +88,8 @@ struct SetupView: View {
                 appState.refreshConfig()
                 if existing {
                     successMessage = "Connecté au drive « \(info.name) »."
+                    try? await Task.sleep(nanoseconds: 800_000_000)
+                    dismiss()
                 } else {
                     appState.unlock()
                 }
