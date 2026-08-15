@@ -528,7 +528,8 @@ private struct FileImportersModifier: ViewModifier {
                           allowedContentTypes: [.item],
                           allowsMultipleSelection: false) { result in
                 switch result {
-                case .success(let url):
+                case .success(let urls):
+                    guard let url = urls.first else { return }
                     guard url.startAccessingSecurityScopedResource() else { return }
                     defer { url.stopAccessingSecurityScopedResource() }
                     if let data = try? Data(contentsOf: url) {
