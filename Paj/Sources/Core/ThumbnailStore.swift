@@ -165,6 +165,10 @@ struct RemoteThumbnail: View {
                 image = await ThumbnailStore.shared.image(forKey: key) {
                     try await KDriveClient.shared.thumbnailData(fileId: file.id, width: width, height: height)
                 }
+                if let img = image, file.isVideo {
+                    await VideoMetadataStore.shared.register(fileId: file.id, imageWidth: img.size.width, imageHeight: img.size.height)
+                }
             }
     }
 }
+

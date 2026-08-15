@@ -3,9 +3,9 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 /// Contenu d'onglet générique : liste ou grille (bascule en toolbar), tri
-/// serveur, recherche globale multi-mots, création de dossiers, import de photos/vidéos/fichiers,
-/// pagination par curseur, sélection multiple avec barre d'actions
-/// (favori, déplacer, tags, renommer, supprimer), visionneuse plein écran.
+/// serveur & durée vidéo, filtre d'orientation vidéo (boutons icônes seuls),
+/// recherche globale multi-mots, création de dossiers, import de photos/vidéos/fichiers via DocumentPicker natif,
+/// pagination par curseur, sélection multiple avec barre d'actions, visionneuse plein écran.
 struct FileListView: View {
     @ObservedObject var model: FileListModel
     var sortable = true
@@ -19,8 +19,10 @@ struct FileListView: View {
     @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
 
     @StateObject private var selection = SelectionState()
+    @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     @State private var searchQuery = ""
+    @State private var selectedOrientation: VideoOrientation?
     @State private var viewerShown = false
     @State private var viewerIndex = 0
     @State private var infoItem: FileItem?
@@ -58,60 +60,123 @@ struct FileListView: View {
     }
 
     private var selectedItems: [FileItem] {
-        model.items.filter { selection.ids.contains($0.id) }
+        displayedItems.filter { selection.ids.contains($0.id) }
     }
 
     private var allSelected: Bool {
-        !model.items.isEmpty && model.items.allSatisfy { selection.ids.contains($0.id) }
+        !displayedItems.isEmpty && displayedItems.allSatisfy { selection.ids.contains($0.id) }
+    }
+
+    private var displayedItems: [FileItem] {
+        var items = model.items
+
+        if let orientation = selectedOrientation {
+            items = items.filter { item in
+                guard item.isVideo else { return false }
+                return videoStore.orientation(for: item.id) == orientation
+            }
+        }
+
+        if sortField == SortField.duration.rawValue {
+            items.sort { a, b in
+                let durA = videoStore.duration(for: a.id) ?? (a.isVideo ? Double(a.size ?? 0) : -1)
+                let durB = videoStore.duration(for: b.id) ?? (b.isVideo ? Double(b.size ?? 0) : -1)
+                return sortAscending ? (durA < durB) : (durA > durB)
+            }
+        }
+
+        return items
     }
 
     var body: some View {
-        listContent
-            .searchable(text: $searchQuery, prompt: "Rechercher sur le drive…")
-            .toolbar { toolbarContent }
-            .refreshable { await model.refresh() }
-            .task { await model.loadFirstPageIfNeeded() }
-            .onChange(of: sortField) { _, _ in reloadForSort() }
-            .onChange(of: sortAscending) { _, _ in reloadForSort() }
-            .onChange(of: searchQuery) { _, query in handleSearchChange(query) }
-            .modifier(FileSheetsModifier(
-                viewerShown: $viewerShown,
-                viewerIndex: $viewerIndex,
-                infoItem: $infoItem,
-                textItem: $textItem,
-                moveTargets: $moveTargets,
-                tagItems: $tagItems,
-                downloadFileUrl: $downloadFileUrl,
-                model: model,
-                selection: selection
-            ))
-            .modifier(FileAlertsModifier(
-                showingNewFolder: $showingNewFolder,
-                newFolderName: $newFolderName,
-                renamingItem: $renamingItem,
-                newName: $newName,
-                deletingItem: $deletingItem,
-                confirmingDeleteSelection: $confirmingDeleteSelection,
-                currentDirectoryId: currentDirectoryId,
-                model: model,
-                selection: selection,
-                deleteSelectionAction: deleteSelection
-            ))
-            .modifier(FileImportersModifier(
-                showingPhotosPicker: $showingPhotosPicker,
-                showingFileImporter: $showingFileImporter,
-                selectedPhotoItems: $selectedPhotoItems,
-                isImporting: $isImporting,
-                currentDirectoryId: currentDirectoryId,
-                model: model
-            ))
-            .modifier(FileOverlaysModifier(
-                model: model,
-                selectionActive: selection.isActive,
-                searchQuery: searchQuery,
-                isDownloading: isDownloading,
-                isImporting: isImporting
-            ))
+        VStack(spacing: 0) {
+            orientationFilterBar
+            listContent
+        }
+        .searchable(text: $searchQuery, prompt: "Rechercher sur le drive…")
+        .toolbar { toolbarContent }
+        .refreshable { await model.refresh() }
+        .task { await model.loadFirstPageIfNeeded() }
+        .onChange(of: sortField) { _, _ in reloadForSort() }
+        .onChange(of: sortAscending) { _, _ in reloadForSort() }
+        .onChange(of: searchQuery) { _, query in handleSearchChange(query) }
+        .modifier(FileSheetsModifier(
+            viewerShown: $viewerShown,
+            viewerIndex: $viewerIndex,
+            infoItem: $infoItem,
+            textItem: $textItem,
+            moveTargets: $moveTargets,
+            tagItems: $tagItems,
+            downloadFileUrl: $downloadFileUrl,
+            showingFileImporter: $showingFileImporter,
+            currentDirectoryId: currentDirectoryId,
+            isImporting: $isImporting,
+            model: model,
+            selection: selection
+        ))
+        .modifier(FileAlertsModifier(
+            showingNewFolder: $showingNewFolder,
+            newFolderName: $newFolderName,
+            renamingItem: $renamingItem,
+            newName: $newName,
+            deletingItem: $deletingItem,
+            confirmingDeleteSelection: $confirmingDeleteSelection,
+            currentDirectoryId: currentDirectoryId,
+            model: model,
+            selection: selection,
+            deleteSelectionAction: deleteSelection
+        ))
+        .modifier(FilePhotosImporterModifier(
+            showingPhotosPicker: $showingPhotosPicker,
+            selectedPhotoItems: $selectedPhotoItems,
+            isImporting: $isImporting,
+            currentDirectoryId: currentDirectoryId,
+            model: model
+        ))
+        .modifier(FileOverlaysModifier(
+            model: model,
+            displayedCount: displayedItems.count,
+            selectionActive: selection.isActive,
+            searchQuery: searchQuery,
+            isDownloading: isDownloading,
+            isImporting: isImporting
+        ))
+    }
+
+    // MARK: - Filtre d'orientation vidéo (boutons icônes simples sans texte)
+
+    private var orientationFilterBar: some View {
+        HStack(spacing: 8) {
+            ForEach(VideoOrientation.allCases) { orientation in
+                Button {
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
+                        if selectedOrientation == orientation {
+                            selectedOrientation = nil
+                        } else {
+                            selectedOrientation = orientation
+                        }
+                    }
+                } label: {
+                    Image(systemName: orientation.systemImage)
+                        .font(.system(size: 15, weight: selectedOrientation == orientation ? .bold : .medium))
+                        .foregroundStyle(selectedOrientation == orientation ? .white : .primary)
+                        .frame(width: 44, height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(selectedOrientation == orientation ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(selectedOrientation == orientation ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(orientation.rawValue)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
     }
 
     private func handleSearchChange(_ query: String) {
@@ -119,7 +184,6 @@ struct FileListView: View {
         if words.isEmpty {
             reloadForSort()
         } else {
-            // Filtrage strict : tous les mots saisis doivent obligatoirement se trouver dans le titre/nom du fichier
             let filterBlock: (FileItem) -> Bool = { item in
                 words.allSatisfy { word in
                     item.name.localizedCaseInsensitiveContains(word)
@@ -133,7 +197,11 @@ struct FileListView: View {
     }
 
     private func reloadForSort() {
-        model.setLoaderAndReload(makeLoader(sortField, sortAscending))
+        if sortField == SortField.duration.rawValue {
+            model.setLoaderAndReload(makeLoader("original", sortAscending))
+        } else {
+            model.setLoaderAndReload(makeLoader(sortField, sortAscending))
+        }
     }
 
     // MARK: - Toolbar
@@ -146,7 +214,7 @@ struct FileListView: View {
                     if allSelected {
                         selection.clear()
                     } else {
-                        selection.selectAll(model.items)
+                        selection.selectAll(displayedItems)
                     }
                 }
             }
@@ -242,7 +310,7 @@ struct FileListView: View {
         if gridView {
             ScrollView {
                 LazyVGrid(columns: gridColumns, spacing: 12) {
-                    ForEach(model.items) { item in
+                    ForEach(displayedItems) { item in
                         gridCell(item)
                     }
                 }
@@ -251,7 +319,7 @@ struct FileListView: View {
             }
         } else {
             List {
-                ForEach(model.items) { item in
+                ForEach(displayedItems) { item in
                     row(item)
                 }
                 footer
@@ -297,7 +365,12 @@ struct FileListView: View {
                 contextActions(item)
             }
         }
-        .onAppear { Task { await model.loadMoreIfNeeded(current: item) } }
+        .onAppear {
+            if item.isVideo {
+                videoStore.loadMetadata(for: item)
+            }
+            Task { await model.loadMoreIfNeeded(current: item) }
+        }
     }
 
     private func gridCell(_ item: FileItem) -> some View {
@@ -326,7 +399,12 @@ struct FileListView: View {
                 contextActions(item)
             }
         }
-        .onAppear { Task { await model.loadMoreIfNeeded(current: item) } }
+        .onAppear {
+            if item.isVideo {
+                videoStore.loadMetadata(for: item)
+            }
+            Task { await model.loadMoreIfNeeded(current: item) }
+        }
     }
 
     private func open(_ item: FileItem) {
@@ -337,7 +415,7 @@ struct FileListView: View {
                 infoItem = item
             }
         } else if item.isMedia {
-            let media = model.items.filter { $0.isMedia }
+            let media = displayedItems.filter { $0.isMedia }
             viewerIndex = media.firstIndex(where: { $0.id == item.id }) ?? 0
             viewerShown = true
         } else if item.isTextFile {
@@ -450,6 +528,9 @@ private struct FileSheetsModifier: ViewModifier {
     @Binding var moveTargets: [FileItem]
     @Binding var tagItems: [FileItem]
     @Binding var downloadFileUrl: URL?
+    @Binding var showingFileImporter: Bool
+    var currentDirectoryId: Int?
+    @Binding var isImporting: Bool
     @ObservedObject var model: FileListModel
     @ObservedObject var selection: SelectionState
 
@@ -485,6 +566,29 @@ private struct FileSheetsModifier: ViewModifier {
                 if let url = downloadFileUrl {
                     ShareSheet(activityItems: [url])
                 }
+            }
+            .sheet(isPresented: $showingFileImporter) {
+                DocumentPicker(onPick: { urls in
+                    showingFileImporter = false
+                    guard !urls.isEmpty else { return }
+                    var filesToUpload: [(name: String, data: Data)] = []
+                    for url in urls {
+                        if let data = try? Data(contentsOf: url) {
+                            filesToUpload.append((url.lastPathComponent, data))
+                        }
+                        try? FileManager.default.removeItem(at: url)
+                    }
+                    if !filesToUpload.isEmpty {
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        isImporting = true
+                        Task { @MainActor in
+                            await model.uploadMultipleFiles(filesToUpload, directoryId: dirId)
+                            isImporting = false
+                        }
+                    }
+                }, onCancel: {
+                    showingFileImporter = false
+                })
             }
     }
 }
@@ -558,9 +662,8 @@ private struct FileAlertsModifier: ViewModifier {
     }
 }
 
-private struct FileImportersModifier: ViewModifier {
+private struct FilePhotosImporterModifier: ViewModifier {
     @Binding var showingPhotosPicker: Bool
-    @Binding var showingFileImporter: Bool
     @Binding var selectedPhotoItems: [PhotosPickerItem]
     @Binding var isImporting: Bool
     var currentDirectoryId: Int?
@@ -573,54 +676,6 @@ private struct FileImportersModifier: ViewModifier {
                 selection: $selectedPhotoItems,
                 matching: .any(of: [.images, .videos])
             )
-            .fileImporter(
-                isPresented: $showingFileImporter,
-                allowedContentTypes: [.item, .content, .data],
-                allowsMultipleSelection: true
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    guard !urls.isEmpty else { return }
-                    var filesToUpload: [(name: String, data: Data)] = []
-                    var lastReadError: String?
-
-                    for url in urls {
-                        let accessing = url.startAccessingSecurityScopedResource()
-                        do {
-                            let data = try Data(contentsOf: url)
-                            filesToUpload.append((url.lastPathComponent, data))
-                        } catch {
-                            var coordinatedData: Data?
-                            var coordErr: NSError?
-                            let coordinator = NSFileCoordinator()
-                            coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: &coordErr) { readUrl in
-                                coordinatedData = try? Data(contentsOf: readUrl)
-                            }
-                            if let d = coordinatedData {
-                                filesToUpload.append((url.lastPathComponent, d))
-                            } else {
-                                lastReadError = coordErr?.localizedDescription ?? error.localizedDescription
-                            }
-                        }
-                        if accessing {
-                            url.stopAccessingSecurityScopedResource()
-                        }
-                    }
-
-                    if !filesToUpload.isEmpty {
-                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                        isImporting = true
-                        Task { @MainActor in
-                            await model.uploadMultipleFiles(filesToUpload, directoryId: dirId)
-                            isImporting = false
-                        }
-                    } else if let lastReadError {
-                        model.errorMessage = "Échec de lecture du fichier : \(lastReadError)"
-                    }
-                case .failure(let error):
-                    model.errorMessage = "Importation impossible : \(error.localizedDescription)"
-                }
-            }
             .onChange(of: selectedPhotoItems) { _, items in
                 guard !items.isEmpty else { return }
                 isImporting = true
@@ -648,9 +703,9 @@ private struct FileImportersModifier: ViewModifier {
     }
 }
 
-
 private struct FileOverlaysModifier: ViewModifier {
     @ObservedObject var model: FileListModel
+    var displayedCount: Int
     var selectionActive: Bool
     var searchQuery: String
     var isDownloading: Bool
@@ -664,10 +719,10 @@ private struct FileOverlaysModifier: ViewModifier {
                 }
             }
             .overlay {
-                if model.items.isEmpty && !model.isLoading && model.errorMessage == nil && !selectionActive {
+                if displayedCount == 0 && !model.isLoading && model.errorMessage == nil && !selectionActive {
                     ContentUnavailableView(searchQuery.isEmpty ? "Vide" : "Aucun résultat",
                                            systemImage: searchQuery.isEmpty ? "tray" : "magnifyingglass",
-                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé contenant tous les mots de « \(searchQuery) »"))
+                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé"))
                 }
             }
             .overlay {

@@ -142,6 +142,7 @@ enum SortField: String, CaseIterable, Identifiable {
     case name
     case lastModified = "last_modified_at"
     case size
+    case duration
     case type
 
     var id: String { rawValue }
@@ -152,15 +153,20 @@ enum SortField: String, CaseIterable, Identifiable {
         case .name: return "Nom"
         case .lastModified: return "Date de modification"
         case .size: return "Taille"
+        case .duration: return "Durée vidéo"
         case .type: return "Type"
         }
     }
 
     /// À envoyer comme order_by à l'API (vide = ordre natif).
     var apiValue: String {
-        self == .original ? "" : rawValue
+        switch self {
+        case .original, .duration: return ""
+        default: return rawValue
+        }
     }
 }
+
 
 // MARK: - Tags (catégories kdrive)
 

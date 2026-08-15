@@ -151,65 +151,25 @@ struct SelectionBadge: View {
     }
 }
 
-// MARK: - Mini Player pour la prévisualisation vidéo au survol
-
-struct MiniVideoPreviewPlayer: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        let player = AVPlayer(url: url)
-        player.isMuted = true
-        player.actionAtItemEnd = .none
-        controller.player = player
-        controller.showsPlaybackControls = false
-        controller.videoGravity = .resizeAspectFill
-
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: player.currentItem,
-            queue: .main
-        ) { _ in
-            player.seek(to: .zero)
-            player.play()
-        }
-        player.play()
-        return controller
-    }
-
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {}
-
-    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: ()) {
-        controller.player?.pause()
-        controller.player = nil
-    }
-}
-
 // MARK: - Cellule de grille
 
 struct FileGridCell: View {
     let item: FileItem
 
-    @AppStorage("videoHoverPreview") private var videoHoverPreview: Bool = true
     @ObservedObject private var categoryStore = CategoryStore.shared
-
-    @State private var isHovered = false
-    @State private var previewVideoUrl: URL?
+    @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     var body: some View {
         VStack(spacing: 5) {
             ZStack {
-                if item.isVideo && videoHoverPreview && isHovered, let url = previewVideoUrl {
-                    MiniVideoPreviewPlayer(url: url)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else if item.isMedia {
+                if item.isMedia {
                     RemoteThumbnail(file: item, width: 400, height: 400, corner: 8)
                 } else {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color(.systemGray5).opacity(0.4))
                         .overlay(FileIcon(item: item, size: 40))
                 }
-                if item.isVideo && (!isHovered || !videoHoverPreview || previewVideoUrl == nil) {
+                if item.isVideo {
                     Image(systemName: "play.circle.fill")
                         .font(.title2)
                         .foregroundStyle(.white)
@@ -217,14 +177,15 @@ struct FileGridCell: View {
                 }
             }
             .aspectRatio(1, contentMode: .fit)
-            .onHover { hovering in
-                isHovered = hovering
-                if hovering && item.isVideo && videoHoverPreview && previewVideoUrl == nil {
-                    Task {
-                        if let url = try? await KDriveClient.shared.temporaryUrl(for: item) {
-                            previewVideoUrl = url
-                        }
-                    }
+            .overlay(alignment: .bottomTrailing) {
+                if item.isVideo, let duration = videoStore.formattedDuration(for: item.id) {
+                    Text(duration)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.black.opacity(0.65)))
+                        .padding(5)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -249,6 +210,11 @@ struct FileGridCell: View {
                         .padding(5)
                 }
             }
+            .task {
+                if item.isVideo {
+                    videoStore.loadMetadata(for: item)
+                }
+            }
             // Hauteur de texte fixe : toutes les cartes ont exactement la
             // même taille, quel que soit le nom du fichier.
             Text(item.name)
@@ -262,6 +228,7 @@ struct FileGridCell: View {
 }
 
 // MARK: - Fiche d'un fichier ou d'un dossier
+
 
 struct FileInfoSheet: View {
     let item: FileItem
