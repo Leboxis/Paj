@@ -4,13 +4,14 @@ import UIKit
 
 /// Visionneuse plein écran : balayage horizontal entre médias (TabView page),
 /// zoom sur les photos, streaming vidéo via URL temporaire kdrive.
+/// La fermeture se fait par une croix intégrée en haut à droite du lecteur.
 struct MediaViewerView: View {
     let items: [FileItem]
     @Binding var index: Int
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        ZStack(alignment: .topTrailing) {
             TabView(selection: $index) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { position, item in
                     MediaPage(item: item)
@@ -18,25 +19,23 @@ struct MediaViewerView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .background(Color.black.ignoresSafeArea())
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("\(index + 1) / \(items.count)")
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title)
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
-                }
+            .ignoresSafeArea()
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(9)
+                    .background(Circle().fill(Color.black.opacity(0.45)))
+                    .contentShape(Circle())
             }
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .padding(.trailing, 14)
+            .padding(.top, 10)
+            .accessibilityLabel("Fermer")
         }
+        .background(Color.black.ignoresSafeArea())
     }
 }
 

@@ -161,6 +161,15 @@ struct FileGridCell: View {
                     .padding(5)
                 }
             }
+            .overlay(alignment: .topTrailing) {
+                if item.isFavorite == true {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
+                        .shadow(color: .black.opacity(0.5), radius: 2)
+                        .padding(5)
+                }
+            }
             // Hauteur de texte fixe : toutes les cartes ont exactement la
             // même taille, quel que soit le nom du fichier.
             Text(item.name)
