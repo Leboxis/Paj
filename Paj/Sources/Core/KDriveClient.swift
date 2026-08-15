@@ -88,12 +88,6 @@ final class KDriveClient {
         return try await get("3/drive/\(AppConfig.driveId)/files/\(id)/files", query: Self.paginationQuery(cursor: cursor, extra: extra))
     }
 
-    func recents(cursor: String?) async throws -> Page<FileItem> {
-        try await get("3/drive/\(AppConfig.driveId)/files/recents", query: Self.paginationQuery(cursor: cursor, extra: [
-            URLQueryItem(name: "limit", value: "100")
-        ]))
-    }
-
     func favorites(cursor: String?, orderBy: String, order: String) async throws -> Page<FileItem> {
         try await get("3/drive/\(AppConfig.driveId)/files/favorites", query: Self.paginationQuery(cursor: cursor, extra: [
             URLQueryItem(name: "limit", value: "100"),
@@ -198,9 +192,12 @@ final class KDriveClient {
     }
 
     func thumbnailData(fileId: Int, width: Int, height: Int) async throws -> Data {
+        // L'API kdrive limite les miniatures à 10...400 px (422 au-delà).
+        let w = min(max(width, 10), 400)
+        let h = min(max(height, 10), 400)
         let req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(fileId)/thumbnail", query: [
-            URLQueryItem(name: "width", value: String(width)),
-            URLQueryItem(name: "height", value: String(height))
+            URLQueryItem(name: "width", value: String(w)),
+            URLQueryItem(name: "height", value: String(h))
         ])
         return try await perform(req)
     }

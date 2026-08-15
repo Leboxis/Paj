@@ -1,12 +1,16 @@
 import SwiftUI
 
-/// Onglet Parcourir : navigation hiérarchique dans l'arborescence du drive.
+/// Onglet Parcourir : navigation libre dans l'arborescence du drive
+/// (tap sur un dossier = push, retour arrière natif).
 struct BrowseView: View {
     @State private var path: [FileItem] = []
 
     var body: some View {
         NavigationStack(path: $path) {
             DirectoryView(directory: FileItem.root(), path: $path)
+                .navigationDestination(for: FileItem.self) { directory in
+                    DirectoryView(directory: directory, path: $path)
+                }
         }
     }
 }
@@ -42,27 +46,6 @@ struct DirectoryView: View {
         )
         .navigationTitle(directory.name)
         .navigationBarTitleDisplayMode(directory.id == AppConfig.rootDirectoryId ? .large : .inline)
-    }
-}
-
-/// Onglet Récents : les derniers fichiers utilisés, tri fixé par l'API.
-struct RecentsView: View {
-    @StateObject private var model = FileListModel { cursor in
-        try await KDriveClient.shared.recents(cursor: cursor)
-    }
-
-    var body: some View {
-        NavigationStack {
-            FileListView(
-                model: model,
-                storageKey: "recents",
-                sortable: false,
-                makeLoader: { _, _ in
-                    { cursor in try await KDriveClient.shared.recents(cursor: cursor) }
-                }
-            )
-            .navigationTitle("Récents")
-        }
     }
 }
 

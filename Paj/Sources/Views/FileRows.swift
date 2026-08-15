@@ -125,7 +125,7 @@ struct FileGridCell: View {
         VStack(spacing: 5) {
             ZStack {
                 if item.isMedia {
-                    RemoteThumbnail(file: item, width: 600, height: 600, corner: 8)
+                    RemoteThumbnail(file: item, width: 400, height: 400, corner: 8)
                 } else {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color(.systemGray5))

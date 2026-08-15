@@ -21,8 +21,6 @@ struct RootView: View {
 struct MainTabView: View {
     var body: some View {
         TabView {
-            RecentsView()
-                .tabItem { Label("Récents", systemImage: "clock") }
             BrowseView()
                 .tabItem { Label("Parcourir", systemImage: "folder") }
             MediaView()

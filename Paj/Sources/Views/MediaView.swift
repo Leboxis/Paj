@@ -182,7 +182,7 @@ struct MediaView: View {
             }
         } label: {
             ZStack {
-                RemoteThumbnail(file: item, width: 600, height: 600, corner: 2)
+                RemoteThumbnail(file: item, width: 400, height: 400, corner: 2)
                     .aspectRatio(1, contentMode: .fit)
                 if item.isVideo {
                     Image(systemName: "play.circle.fill")
