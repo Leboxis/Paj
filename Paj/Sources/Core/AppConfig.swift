@@ -22,7 +22,7 @@ enum AppConfig {
     }
 
     static var rootDirectoryId: Int {
-        Int(keychainGet("rootId") ?? "") ?? 1
+        Int(keychainGet("rootId") ?? "") ?? 5
     }
 
     static var isConfigured: Bool {

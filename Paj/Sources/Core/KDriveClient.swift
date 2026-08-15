@@ -98,11 +98,13 @@ final class KDriveClient {
 
     /// Bibliothèque médias : recherche de tous les fichiers image/vidéo du drive,
     /// triés du plus récemment modifié au plus ancien.
+    /// Sans le paramètre `depth`, l'API effectue une recherche profonde par
+    /// défaut (équivalent de depth=unlimited mais sans le 422).
     func mediaLibrary(cursor: String?) async throws -> Page<FileItem> {
         try await get("3/drive/\(AppConfig.driveId)/files/search", query: Self.paginationQuery(cursor: cursor, extra: [
             URLQueryItem(name: "types[]", value: "image"),
             URLQueryItem(name: "types[]", value: "video"),
-            URLQueryItem(name: "depth", value: "unlimited"),
+            URLQueryItem(name: "directory_id", value: String(AppConfig.rootDirectoryId)),
             URLQueryItem(name: "order_by", value: "last_modified_at"),
             URLQueryItem(name: "order", value: "desc"),
             URLQueryItem(name: "limit", value: "100")

@@ -52,9 +52,7 @@ struct MediaView: View {
             }
             .navigationTitle("Médias")
             .toolbar { toolbarContent }
-            .refreshable {
-                if !selection.isActive { await model.refresh() }
-            }
+            .refreshable { await model.refresh() }
             .task { await model.loadFirstPageIfNeeded() }
             .fullScreenCover(isPresented: $viewerShown) {
                 MediaViewerView(items: model.items, index: $viewerIndex)

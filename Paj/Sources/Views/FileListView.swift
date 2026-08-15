@@ -51,9 +51,7 @@ struct FileListView: View {
     var body: some View {
         listContent
             .toolbar { toolbarContent }
-            .refreshable {
-                if !selection.isActive { await model.refresh() }
-            }
+            .refreshable { await model.refresh() }
             .task { await model.loadFirstPageIfNeeded() }
             .onChange(of: sortField) { _, _ in reloadForSort() }
             .onChange(of: sortAscending) { _, _ in reloadForSort() }
