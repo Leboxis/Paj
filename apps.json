@@ -5,11 +5,11 @@
     {
       "name": "Paj",
       "bundleIdentifier": "com.paj.drive",
-      "version": "1.1.11",
-      "versionDate": "2026-08-15T18:31:22Z",
+      "version": "1.1.12",
+      "versionDate": "2026-08-15T18:33:54Z",
       "versionDescription": "Client kdrive personnel (Infomaniak).",
       "downloadURL": "https://github.com/Leboxis/Paj/releases/latest/download/Paj.ipa",
-      "size": 361174,
+      "size": 362140,
       "tintColor": "0A84FF",
       "developerName": "Leboxis",
       "iconURL": "https://raw.githubusercontent.com/Leboxis/Paj/main/Paj/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png"
