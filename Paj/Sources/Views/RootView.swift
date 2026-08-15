@@ -31,6 +31,8 @@ struct MainTabView: View {
                 .tabItem { Label("Corbeille", systemImage: "trash") }
             SettingsView()
                 .tabItem { Label("Réglages", systemImage: "gearshape") }
+            ProfileView()
+                .tabItem { Label("Profil", systemImage: "person.crop.circle") }
         }
         .task { await CategoryStore.shared.loadIfNeeded() }
     }

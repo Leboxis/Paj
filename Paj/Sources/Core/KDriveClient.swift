@@ -91,9 +91,9 @@ final class KDriveClient {
         return try await get("3/drive/\(AppConfig.driveId)/files/\(id)/files", query: Self.paginationQuery(cursor: cursor, extra: extra))
     }
 
-    func favorites(cursor: String?, orderBy: String, order: String) async throws -> Page<FileItem> {
+    func favorites(cursor: String?, orderBy: String, order: String, limit: Int = 100) async throws -> Page<FileItem> {
         var extra = [
-            URLQueryItem(name: "limit", value: "100"),
+            URLQueryItem(name: "limit", value: String(max(limit, 5))),
             URLQueryItem(name: "with", value: "categories")
         ]
         if !orderBy.isEmpty && orderBy != "original" {
@@ -101,6 +101,15 @@ final class KDriveClient {
             extra.append(URLQueryItem(name: "order", value: order))
         }
         return try await get("3/drive/\(AppConfig.driveId)/files/favorites", query: Self.paginationQuery(cursor: cursor, extra: extra))
+    }
+
+    /// Derniers fichiers ajoutés/modifiés sur tout le drive (proxy des
+    /// uploads récents), pagination par curseur.
+    func lastModifiedFiles(cursor: String?, limit: Int = 12) async throws -> Page<FileItem> {
+        try await get("3/drive/\(AppConfig.driveId)/files/last_modified", query: Self.paginationQuery(cursor: cursor, extra: [
+            URLQueryItem(name: "limit", value: String(max(limit, 5))),
+            URLQueryItem(name: "with", value: "categories")
+        ]))
     }
 
     /// Fichiers portant un tag donné (recherche par id de catégorie).

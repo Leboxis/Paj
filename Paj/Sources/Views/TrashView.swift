@@ -1,8 +1,16 @@
 import SwiftUI
 
-/// Onglet Corbeille : éléments supprimés du drive, restauration ou
-/// suppression définitive, vue grille ou liste.
+/// Onglet Corbeille (barre d'onglets) : empile TrashScreen dans sa propre
+/// NavigationStack.
 struct TrashView: View {
+    var body: some View {
+        NavigationStack { TrashScreen() }
+    }
+}
+
+/// Contenu Corbeille : éléments supprimés du drive, restauration ou
+/// suppression définitive, vue grille ou liste. Poussable depuis le Profil.
+struct TrashScreen: View {
     @StateObject private var model = FileListModel { cursor in
         try await KDriveClient.shared.trash(cursor: cursor)
     }
@@ -12,106 +20,104 @@ struct TrashView: View {
     @State private var permanentItem: FileItem?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if gridView {
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), spacing: 10)], spacing: 12) {
-                            ForEach(model.items) { item in
-                                cell(item)
-                            }
-                        }
-                        .padding(12)
-                        if model.canLoadMore && !model.items.isEmpty {
-                            Color.clear
-                                .frame(height: 4)
-                                .onAppear { Task { await model.loadMore() } }
-                        }
-                    }
-                } else {
-                    List {
+        Group {
+            if gridView {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), spacing: 10)], spacing: 12) {
                         ForEach(model.items) { item in
-                            row(item)
-                        }
-                        if model.canLoadMore && !model.items.isEmpty {
-                            Color.clear
-                                .frame(height: 4)
-                                .onAppear { Task { await model.loadMore() } }
+                            cell(item)
                         }
                     }
-                    .listStyle(.insetGrouped)
+                    .padding(12)
+                    if model.canLoadMore && !model.items.isEmpty {
+                        Color.clear
+                            .frame(height: 4)
+                            .onAppear { Task { await model.loadMore() } }
+                    }
+                }
+            } else {
+                List {
+                    ForEach(model.items) { item in
+                        row(item)
+                    }
+                    if model.canLoadMore && !model.items.isEmpty {
+                        Color.clear
+                            .frame(height: 4)
+                            .onAppear { Task { await model.loadMore() } }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("Corbeille")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { gridView.toggle() }
+                } label: {
+                    Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
+                }
+                .accessibilityLabel(gridView ? "Vue liste" : "Vue grille")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) {
+                    confirmEmpty = true
+                } label: {
+                    Label("Vider", systemImage: "trash")
+                }
+                .disabled(model.items.isEmpty)
+            }
+        }
+        .refreshable { await model.refresh() }
+        .task { await model.loadFirstPageIfNeeded() }
+        .alert("Vider la corbeille ?", isPresented: $confirmEmpty) {
+            Button("Vider", role: .destructive) {
+                Task {
+                    do {
+                        try await KDriveClient.shared.emptyTrash()
+                        await model.refresh()
+                    } catch {
+                        model.errorMessage = error.localizedDescription
+                    }
                 }
             }
-            .navigationTitle("Corbeille")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) { gridView.toggle() }
-                    } label: {
-                        Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
-                    }
-                    .accessibilityLabel(gridView ? "Vue liste" : "Vue grille")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .destructive) {
-                        confirmEmpty = true
-                    } label: {
-                        Label("Vider", systemImage: "trash")
-                    }
-                    .disabled(model.items.isEmpty)
-                }
-            }
-            .refreshable { await model.refresh() }
-            .task { await model.loadFirstPageIfNeeded() }
-            .alert("Vider la corbeille ?", isPresented: $confirmEmpty) {
-                Button("Vider", role: .destructive) {
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Tous les éléments seront supprimés définitivement.")
+        }
+        .alert("Supprimer définitivement « \(permanentItem?.name ?? "") » ?",
+               isPresented: Binding(get: { permanentItem != nil },
+                                    set: { if !$0 { permanentItem = nil } })) {
+            Button("Supprimer", role: .destructive) {
+                if let item = permanentItem {
                     Task {
                         do {
-                            try await KDriveClient.shared.emptyTrash()
-                            await model.refresh()
+                            try await KDriveClient.shared.deletePermanently(item)
+                            model.items.removeAll { $0.id == item.id }
                         } catch {
                             model.errorMessage = error.localizedDescription
                         }
                     }
                 }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("Tous les éléments seront supprimés définitivement.")
             }
-            .alert("Supprimer définitivement « \(permanentItem?.name ?? "") » ?",
-                   isPresented: Binding(get: { permanentItem != nil },
-                                        set: { if !$0 { permanentItem = nil } })) {
-                Button("Supprimer", role: .destructive) {
-                    if let item = permanentItem {
-                        Task {
-                            do {
-                                try await KDriveClient.shared.deletePermanently(item)
-                                model.items.removeAll { $0.id == item.id }
-                            } catch {
-                                model.errorMessage = error.localizedDescription
-                            }
-                        }
-                    }
-                }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("L'élément sera supprimé définitivement du drive.")
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("L'élément sera supprimé définitivement du drive.")
+        }
+        .alert("Erreur", isPresented: Binding(get: { model.errorMessage != nil },
+                                              set: { if !$0 { model.errorMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
+        .overlay {
+            if model.items.isEmpty && model.isLoading {
+                ProgressView()
             }
-            .alert("Erreur", isPresented: Binding(get: { model.errorMessage != nil },
-                                                  set: { if !$0 { model.errorMessage = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(model.errorMessage ?? "")
-            }
-            .overlay {
-                if model.items.isEmpty && model.isLoading {
-                    ProgressView()
-                }
-            }
-            .overlay {
-                if model.items.isEmpty && !model.isLoading && model.errorMessage == nil {
-                    ContentUnavailableView("Corbeille vide", systemImage: "trash")
-                }
+        }
+        .overlay {
+            if model.items.isEmpty && !model.isLoading && model.errorMessage == nil {
+                ContentUnavailableView("Corbeille vide", systemImage: "trash")
             }
         }
     }
