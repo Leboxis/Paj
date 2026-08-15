@@ -90,7 +90,7 @@ struct FileListView: View {
 
     var body: some View {
         listContent
-            .searchable(text: $searchQuery, prompt: "Rechercher sur le drive…")
+            .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Rechercher sur le drive…")
             .toolbar { toolbarContent }
             .refreshable { await model.refresh() }
             .task { await model.loadFirstPageIfNeeded() }
@@ -140,42 +140,15 @@ struct FileListView: View {
             ))
     }
 
-    // MARK: - Filtre d'orientation vidéo (boutons icônes centrés sans texte)
+    // MARK: - Filtre d'orientation vidéo (affiché uniquement lors de la recherche)
 
     private var orientationFilterBar: some View {
-        HStack(spacing: 12) {
-            Spacer()
-            ForEach(VideoOrientation.allCases) { orientation in
-                Button {
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
-                        if selectedOrientation == orientation {
-                            selectedOrientation = nil
-                        } else {
-                            selectedOrientation = orientation
-                        }
-                    }
-                } label: {
-                    Image(systemName: orientation.systemImage)
-                        .font(.system(size: 15, weight: selectedOrientation == orientation ? .bold : .medium))
-                        .foregroundStyle(selectedOrientation == orientation ? .white : .primary)
-                        .frame(width: 44, height: 32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(selectedOrientation == orientation ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(selectedOrientation == orientation ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(orientation.rawValue)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        OrientationFilterBarWrapper(
+            selectedOrientation: $selectedOrientation,
+            searchQuery: searchQuery
+        )
     }
+
 
 
     private func handleSearchChange(_ query: String) {
@@ -750,3 +723,48 @@ private struct FileOverlaysModifier: ViewModifier {
             }
     }
 }
+
+private struct OrientationFilterBarWrapper: View {
+    @Environment(\.isSearching) private var isSearching
+    @Binding var selectedOrientation: VideoOrientation?
+    let searchQuery: String
+
+    var body: some View {
+        if isSearching || !searchQuery.isEmpty {
+            HStack(spacing: 12) {
+                Spacer()
+                ForEach(VideoOrientation.allCases) { orientation in
+                    Button {
+                        withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
+                            if selectedOrientation == orientation {
+                                selectedOrientation = nil
+                            } else {
+                                selectedOrientation = orientation
+                            }
+                        }
+                    } label: {
+                        Image(systemName: orientation.systemImage)
+                            .font(.system(size: 15, weight: selectedOrientation == orientation ? .bold : .medium))
+                            .foregroundStyle(selectedOrientation == orientation ? .white : .primary)
+                            .frame(width: 44, height: 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(selectedOrientation == orientation ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(selectedOrientation == orientation ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(orientation.rawValue)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+}
+

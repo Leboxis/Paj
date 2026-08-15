@@ -5,21 +5,19 @@ import SwiftUI
 /// coût en pixels décodés) + répertoire disque plafonné (~250 Mo, éviction
 /// par plus ancien). La miniature est demandée au serveur à la taille exacte
 /// de la cellule : le sous-échantillonnage est fait côté kdrive, ce qui
-/// garde le défilement à 120 Hz. Les requêtes concurrentes pour la même
-/// clé sont dédupliquées, et lecture disque/décodage se font hors thread
-/// principal.
+/// garde le défilement fluide à 120 Hz.
 final class ThumbnailStore {
     static let shared = ThumbnailStore()
 
     private let memory = NSCache<NSString, UIImage>()
     private let diskDir: URL
-    private let ioQueue = DispatchQueue(label: "com.paj.thumbs.io")
+    private let ioQueue = DispatchQueue(label: "com.paj.thumbs.io", qos: .utility)
+    private let syncQueue = DispatchQueue(label: "com.paj.thumbs.sync")
     private let maxDiskBytes = 250 * 1024 * 1024
     private let maxMemoryBytes = 120 * 1024 * 1024
 
-    // Requêtes en cours (dédup pendant le scroll rapide).
-    private let inFlightLock = NSLock()
     private var inFlight: [String: Task<UIImage?, Never>] = [:]
+    private var lastTrimDate = Date.distantPast
 
     private init() {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -27,40 +25,53 @@ final class ThumbnailStore {
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)
         memory.totalCostLimit = maxMemoryBytes
         memory.countLimit = 1500
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.memory.removeAllObjects()
+        }
     }
 
     func image(forKey key: String, fetch: @escaping () async throws -> Data) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
 
-        inFlightLock.lock()
-        let existing = inFlight[key]
+        var existing: Task<UIImage?, Never>?
         var started: Task<UIImage?, Never>?
-        if existing == nil {
-            started = Task { [weak self] () -> UIImage? in
-                guard let self else { return nil }
-                return await self.loadFromDiskOrFetch(key: key, fetch: fetch)
+
+        syncQueue.sync {
+            if let task = inFlight[key] {
+                existing = task
+            } else {
+                let newTask = Task { [weak self] () -> UIImage? in
+                    guard let self else { return nil }
+                    return await self.loadFromDiskOrFetch(key: key, fetch: fetch)
+                }
+                inFlight[key] = newTask
+                started = newTask
             }
-            inFlight[key] = started
         }
-        inFlightLock.unlock()
 
         if let existing {
             return await existing.value
         }
         guard let started else { return nil }
         let result = await started.value
-        inFlightLock.lock()
-        inFlight[key] = nil
-        inFlightLock.unlock()
+
+        syncQueue.sync {
+            inFlight[key] = nil
+        }
         return result
     }
 
     private func loadFromDiskOrFetch(key: String, fetch: @escaping () async throws -> Data) async -> UIImage? {
         let url = diskDir.appendingPathComponent(Self.safeName(key))
-        let cached = await Task.detached(priority: .utility, operation: { () -> UIImage? in
+        let cached = await Task.detached(priority: .utility) { () -> UIImage? in
             guard let data = try? Data(contentsOf: url) else { return nil }
             return UIImage(data: data)
-        }).value
+        }.value
 
         if let cached {
             memory.setObject(cached, forKey: key as NSString, cost: Self.pixelCost(of: cached))
@@ -75,9 +86,14 @@ final class ThumbnailStore {
 
         let dir = diskDir
         let limit = maxDiskBytes
-        ioQueue.async {
+        ioQueue.async { [weak self] in
             try? data.write(to: url, options: .atomic)
-            Self.trimDisk(dir: dir, maxBytes: limit)
+            guard let self else { return }
+            let now = Date()
+            if now.timeIntervalSince(self.lastTrimDate) > 60 {
+                self.lastTrimDate = now
+                Self.trimDisk(dir: dir, maxBytes: limit)
+            }
         }
         return image
     }
@@ -143,9 +159,6 @@ struct RemoteThumbnail: View {
     @State private var image: UIImage?
 
     var body: some View {
-        // Rectangle définit la taille (contraint par le parent) : l'image en
-        // overlay remplit et est rognée — taille identique quel que soit le
-        // ratio d'origine (photo portrait, vidéo horizontale…).
         Rectangle()
             .fill(Color(.systemGray5).opacity(0.4))
             .overlay {
@@ -171,4 +184,3 @@ struct RemoteThumbnail: View {
             }
     }
 }
-

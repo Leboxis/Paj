@@ -54,8 +54,8 @@ final class FileListModel: ObservableObject {
         }
     }
 
-    private func performLoad() async {
-        defer { isLoading = false }
+    private func performLoad(depth: Int = 0) async {
+        defer { if depth == 0 { isLoading = false } }
         do {
             let page = try await loader(cursor)
             guard !Task.isCancelled else { return }
@@ -72,8 +72,8 @@ final class FileListModel: ObservableObject {
             hasMore = page.hasMore ?? !((page.cursor ?? "").isEmpty)
 
             // Si le filtre a éliminé des éléments et qu'on a moins de 10 éléments affichés alors qu'il reste des pages, on continue le chargement
-            if items.count < 10 && hasMore && !(page.data ?? []).isEmpty {
-                await performLoad()
+            if items.count < 10 && hasMore && !(page.data ?? []).isEmpty && depth < 5 {
+                await performLoad(depth: depth + 1)
             }
         } catch is CancellationError {
             return
@@ -83,6 +83,7 @@ final class FileListModel: ObservableObject {
             }
         }
     }
+
 
     /// Préchargement : déclenché quand la ligne affichée approche de la fin.
     func loadMoreIfNeeded(current: FileItem) async {
