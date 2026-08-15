@@ -16,7 +16,7 @@ struct FileItem: Identifiable, Hashable, Codable {
     var isFavorite: Bool?
     var categories: [FileCategoryLink]?
 
-    var isDirectory: Bool { type == "directory" }
+    var isDirectory: Bool { type == "dir" || type == "directory" }
 
     /// Tags appliqués au fichier (avec nom et couleur).
     var tagList: [KCategory] {
@@ -38,11 +38,11 @@ struct FileItem: Identifiable, Hashable, Codable {
         return nil
     }
 
-    /// Racine du drive (id 1 validé contre l'API en direct).
+    /// Racine du drive (dossier « Private », id 5 — validé contre l'API).
     static func root() -> FileItem {
         FileItem(id: AppConfig.rootDirectoryId,
                  name: "Mon drive",
-                 type: "directory",
+                 type: "dir",
                  size: nil,
                  mimeType: nil,
                  extensionType: nil,
