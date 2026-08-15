@@ -57,17 +57,18 @@ final class ThumbnailStore {
 
     private func loadFromDiskOrFetch(key: String, fetch: @escaping () async throws -> Data) async -> UIImage? {
         let url = diskDir.appendingPathComponent(Self.safeName(key))
-        // Lecture disque + décodage hors du thread principal (fluidité).
-        if let cached = await Task.detached(priority: .utility) { () -> UIImage? in
+        let cached = await Task.detached(priority: .utility, operation: { () -> UIImage? in
             guard let data = try? Data(contentsOf: url) else { return nil }
             return UIImage(data: data)
-        }.value {
+        }).value
+
+        if let cached {
             memory.setObject(cached, forKey: key as NSString, cost: Self.pixelCost(of: cached))
             return cached
         }
 
-        guard let data = try? await fetch(), !data.isEmpty,
-              let image = await Task.detached(priority: .utility) { UIImage(data: data) }.value else {
+        guard let data = try? await fetch(), !data.isEmpty else { return nil }
+        guard let image = await Task.detached(priority: .utility, operation: { UIImage(data: data) }).value else {
             return nil
         }
         memory.setObject(image, forKey: key as NSString, cost: Self.pixelCost(of: image))

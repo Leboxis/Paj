@@ -264,7 +264,7 @@ struct FileInfoSheet: View {
             do {
                 let url = try await KDriveClient.shared.temporaryUrl(for: item)
                 temporaryUrl = url
-                UIApplication.shared.open(url)
+                _ = await UIApplication.shared.open(url)
             } catch {
                 errorMessage = error.localizedDescription
             }

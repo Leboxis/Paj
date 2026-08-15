@@ -158,11 +158,14 @@ struct LinkTextView: UIViewRepresentable {
         }
 
         func textView(_ textView: UITextView,
-                      shouldInteractWith url: URL,
-                      in characterRange: NSRange,
-                      interaction: UITextItemInteraction) -> Bool {
-            onLinkTapped(url)
-            return false
+                      primaryActionFor textItem: UITextItem,
+                      defaultAction: UIAction) -> UIAction? {
+            if case .link(let url) = textItem.content {
+                return UIAction { [weak self] _ in
+                    self?.onLinkTapped(url)
+                }
+            }
+            return defaultAction
         }
     }
 }

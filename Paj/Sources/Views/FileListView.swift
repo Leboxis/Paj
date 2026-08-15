@@ -69,147 +69,52 @@ struct FileListView: View {
             .task { await model.loadFirstPageIfNeeded() }
             .onChange(of: sortField) { _, _ in reloadForSort() }
             .onChange(of: sortAscending) { _, _ in reloadForSort() }
-            .onChange(of: searchQuery) { _, query in
-                let trimmed = query.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty {
-                    reloadForSort()
-                } else {
-                    model.setLoaderAndReload { cursor in
-                        try await KDriveClient.shared.searchFiles(query: trimmed, cursor: cursor)
-                    }
-                }
+            .onChange(of: searchQuery) { _, query in handleSearchChange(query) }
+            .modifier(FileSheetsModifier(
+                viewerShown: $viewerShown,
+                viewerIndex: $viewerIndex,
+                infoItem: $infoItem,
+                textItem: $textItem,
+                moveTargets: $moveTargets,
+                tagItems: $tagItems,
+                shareUrl: $shareUrl,
+                model: model,
+                selection: selection
+            ))
+            .modifier(FileAlertsModifier(
+                showingNewFolder: $showingNewFolder,
+                newFolderName: $newFolderName,
+                renamingItem: $renamingItem,
+                newName: $newName,
+                deletingItem: $deletingItem,
+                confirmingDeleteSelection: $confirmingDeleteSelection,
+                currentDirectoryId: currentDirectoryId,
+                model: model,
+                selection: selection,
+                deleteSelectionAction: deleteSelection
+            ))
+            .modifier(FileImportersModifier(
+                showingFileImporter: $showingFileImporter,
+                selectedPhotoItem: $selectedPhotoItem,
+                currentDirectoryId: currentDirectoryId,
+                model: model
+            ))
+            .modifier(FileOverlaysModifier(
+                model: model,
+                selectionActive: selection.isActive,
+                searchQuery: searchQuery
+            ))
+    }
+
+    private func handleSearchChange(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            reloadForSort()
+        } else {
+            model.setLoaderAndReload { cursor in
+                try await KDriveClient.shared.searchFiles(query: trimmed, cursor: cursor)
             }
-            .fullScreenCover(isPresented: $viewerShown) {
-                MediaViewerView(items: model.items.filter { $0.isMedia }, index: $viewerIndex)
-            }
-            .sheet(item: $infoItem) { FileInfoSheet(item: $0) }
-            .sheet(item: $textItem) { TextFileView(item: $0) }
-            .sheet(isPresented: Binding(get: { !moveTargets.isEmpty },
-                                        set: { if !$0 { moveTargets = [] } })) {
-                DirectoryPickerView { destination in
-                    let targets = moveTargets
-                    selection.end()
-                    Task {
-                        await model.performBatch(targets, label: "déplacement") {
-                            try await KDriveClient.shared.move($0, to: destination)
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: Binding(get: { !tagItems.isEmpty },
-                                        set: { if !$0 { tagItems = [] } })) {
-                TagsSheet(items: tagItems) {
-                    selection.end()
-                    Task { await model.refresh() }
-                }
-            }
-            .sheet(isPresented: Binding(get: { shareUrl != nil },
-                                        set: { if !$0 { shareUrl = nil } })) {
-                if let url = shareUrl {
-                    ShareSheet(activityItems: [url])
-                }
-            }
-            .alert("Nouveau dossier", isPresented: $showingNewFolder) {
-                TextField("Nom du dossier", text: $newFolderName)
-                Button("Annuler", role: .cancel) { newFolderName = "" }
-                Button("Créer") {
-                    let name = newFolderName.trimmingCharacters(in: .whitespaces)
-                    guard !name.isEmpty else { return }
-                    let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                    newFolderName = ""
-                    Task {
-                        await model.createDirectory(name: name, in: dirId)
-                    }
-                }
-            }
-            .alert("Renommer", isPresented: Binding(get: { renamingItem != nil },
-                                                    set: { if !$0 { renamingItem = nil } })) {
-                TextField("Nouveau nom", text: $newName)
-                Button("Annuler", role: .cancel) {}
-                Button("Enregistrer") {
-                    if let item = renamingItem, !newName.isEmpty {
-                        let name = newName
-                        selection.end()
-                        Task { await model.rename(item, to: name) }
-                    }
-                }
-            } message: {
-                Text(renamingItem?.name ?? "")
-            }
-            .alert("Supprimer « \(deletingItem?.name ?? "") » ?",
-                   isPresented: Binding(get: { deletingItem != nil },
-                                        set: { if !$0 { deletingItem = nil } })) {
-                Button("Supprimer", role: .destructive) {
-                    if let item = deletingItem {
-                        Task { await model.delete(item) }
-                    }
-                }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("L'élément sera déplacé dans la corbeille du drive.")
-            }
-            .alert("Supprimer \(selection.count) élément(s) ?",
-                   isPresented: $confirmingDeleteSelection) {
-                Button("Supprimer", role: .destructive) { deleteSelection() }
-                Button("Annuler", role: .cancel) {}
-            } message: {
-                Text("Les éléments seront déplacés dans la corbeille du drive.")
-            }
-            .alert("Erreur", isPresented: Binding(get: { model.errorMessage != nil },
-                                                  set: { if !$0 { model.errorMessage = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(model.errorMessage ?? "")
-            }
-            .fileImporter(isPresented: $showingFileImporter,
-                          allowedContentTypes: [.item],
-                          allowsMultipleSelection: false) { result in
-                switch result {
-                case .success(let url):
-                    guard url.startAccessingSecurityScopedResource() else { return }
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    if let data = try? Data(contentsOf: url) {
-                        let name = url.lastPathComponent
-                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                        Task {
-                            await model.uploadFile(name: name, data: data, directoryId: dirId)
-                        }
-                    }
-                case .failure(let error):
-                    model.errorMessage = error.localizedDescription
-                }
-            }
-            .onChange(of: selectedPhotoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self) {
-                        let name = "Upload_\(Int(Date().timeIntervalSince1970)).jpg"
-                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                        await model.uploadFile(name: name, data: data, directoryId: dirId)
-                    }
-                    selectedPhotoItem = nil
-                }
-            }
-            .overlay {
-                if model.items.isEmpty && model.isLoading && model.errorMessage == nil {
-                    ProgressView()
-                }
-            }
-            .overlay {
-                if model.items.isEmpty && !model.isLoading && model.errorMessage == nil && !selection.isActive {
-                    ContentUnavailableView(searchQuery.isEmpty ? "Vide" : "Aucun résultat",
-                                           systemImage: searchQuery.isEmpty ? "tray" : "magnifyingglass",
-                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé pour « \(searchQuery) »"))
-                }
-            }
-            .overlay {
-                if model.isBatching {
-                    ZStack {
-                        Color(.systemBackground).opacity(0.6).ignoresSafeArea()
-                        ProgressView("Opération en cours…")
-                    }
-                }
-            }
+        }
     }
 
     private func reloadForSort() {
@@ -491,5 +396,192 @@ struct FileListView: View {
                 try await KDriveClient.shared.delete($0)
             }
         }
+    }
+}
+
+// MARK: - Modificateurs décomposés
+
+private struct FileSheetsModifier: ViewModifier {
+    @Binding var viewerShown: Bool
+    @Binding var viewerIndex: Int
+    @Binding var infoItem: FileItem?
+    @Binding var textItem: FileItem?
+    @Binding var moveTargets: [FileItem]
+    @Binding var tagItems: [FileItem]
+    @Binding var shareUrl: URL?
+    @ObservedObject var model: FileListModel
+    @ObservedObject var selection: SelectionState
+
+    func body(content: Content) -> some View {
+        content
+            .fullScreenCover(isPresented: $viewerShown) {
+                MediaViewerView(items: model.items.filter { $0.isMedia }, index: $viewerIndex)
+            }
+            .sheet(item: $infoItem) { FileInfoSheet(item: $0) }
+            .sheet(item: $textItem) { TextFileView(item: $0) }
+            .sheet(isPresented: Binding(get: { !moveTargets.isEmpty },
+                                        set: { if !$0 { moveTargets = [] } })) {
+                DirectoryPickerView { destination in
+                    let targets = moveTargets
+                    selection.end()
+                    Task {
+                        await model.performBatch(targets, label: "déplacement") {
+                            try await KDriveClient.shared.move($0, to: destination)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: Binding(get: { !tagItems.isEmpty },
+                                        set: { if !$0 { tagItems = [] } })) {
+                TagsSheet(items: tagItems) {
+                    selection.end()
+                    Task { await model.refresh() }
+                }
+            }
+            .sheet(isPresented: Binding(get: { shareUrl != nil },
+                                        set: { if !$0 { shareUrl = nil } })) {
+                if let url = shareUrl {
+                    ShareSheet(activityItems: [url])
+                }
+            }
+    }
+}
+
+private struct FileAlertsModifier: ViewModifier {
+    @Binding var showingNewFolder: Bool
+    @Binding var newFolderName: String
+    @Binding var renamingItem: FileItem?
+    @Binding var newName: String
+    @Binding var deletingItem: FileItem?
+    @Binding var confirmingDeleteSelection: Bool
+    var currentDirectoryId: Int?
+    @ObservedObject var model: FileListModel
+    @ObservedObject var selection: SelectionState
+    var deleteSelectionAction: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Nouveau dossier", isPresented: $showingNewFolder) {
+                TextField("Nom du dossier", text: $newFolderName)
+                Button("Annuler", role: .cancel) { newFolderName = "" }
+                Button("Créer") {
+                    let name = newFolderName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                    newFolderName = ""
+                    Task {
+                        await model.createDirectory(name: name, in: dirId)
+                    }
+                }
+            }
+            .alert("Renommer", isPresented: Binding(get: { renamingItem != nil },
+                                                    set: { if !$0 { renamingItem = nil } })) {
+                TextField("Nouveau nom", text: $newName)
+                Button("Annuler", role: .cancel) {}
+                Button("Enregistrer") {
+                    if let item = renamingItem, !newName.isEmpty {
+                        let name = newName
+                        selection.end()
+                        Task { await model.rename(item, to: name) }
+                    }
+                }
+            } message: {
+                Text(renamingItem?.name ?? "")
+            }
+            .alert("Supprimer « \(deletingItem?.name ?? "") » ?",
+                   isPresented: Binding(get: { deletingItem != nil },
+                                        set: { if !$0 { deletingItem = nil } })) {
+                Button("Supprimer", role: .destructive) {
+                    if let item = deletingItem {
+                        Task { await model.delete(item) }
+                    }
+                }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("L'élément sera déplacé dans la corbeille du drive.")
+            }
+            .alert("Supprimer \(selection.count) élément(s) ?",
+                   isPresented: $confirmingDeleteSelection) {
+                Button("Supprimer", role: .destructive) { deleteSelectionAction() }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Les éléments seront déplacés dans la corbeille du drive.")
+            }
+            .alert("Erreur", isPresented: Binding(get: { model.errorMessage != nil },
+                                                  set: { if !$0 { model.errorMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(model.errorMessage ?? "")
+            }
+    }
+}
+
+private struct FileImportersModifier: ViewModifier {
+    @Binding var showingFileImporter: Bool
+    @Binding var selectedPhotoItem: PhotosPickerItem?
+    var currentDirectoryId: Int?
+    @ObservedObject var model: FileListModel
+
+    func body(content: Content) -> some View {
+        content
+            .fileImporter(isPresented: $showingFileImporter,
+                          allowedContentTypes: [.item],
+                          allowsMultipleSelection: false) { result in
+                switch result {
+                case .success(let url):
+                    guard url.startAccessingSecurityScopedResource() else { return }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    if let data = try? Data(contentsOf: url) {
+                        let name = url.lastPathComponent
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        Task {
+                            await model.uploadFile(name: name, data: data, directoryId: dirId)
+                        }
+                    }
+                case .failure(let error):
+                    model.errorMessage = error.localizedDescription
+                }
+            }
+            .onChange(of: selectedPhotoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        let name = "Upload_\(Int(Date().timeIntervalSince1970)).jpg"
+                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                        await model.uploadFile(name: name, data: data, directoryId: dirId)
+                    }
+                    selectedPhotoItem = nil
+                }
+            }
+    }
+}
+
+private struct FileOverlaysModifier: ViewModifier {
+    @ObservedObject var model: FileListModel
+    var selectionActive: Bool
+    var searchQuery: String
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if model.items.isEmpty && model.isLoading && model.errorMessage == nil {
+                    ProgressView()
+                }
+            }
+            .overlay {
+                if model.items.isEmpty && !model.isLoading && model.errorMessage == nil && !selectionActive {
+                    ContentUnavailableView(searchQuery.isEmpty ? "Vide" : "Aucun résultat",
+                                           systemImage: searchQuery.isEmpty ? "tray" : "magnifyingglass",
+                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé pour « \(searchQuery) »"))
+                }
+            }
+            .overlay {
+                if model.isBatching {
+                    ZStack {
+                        Color(.systemBackground).opacity(0.6).ignoresSafeArea()
+                        ProgressView("Opération en cours…")
+                    }
+                }
+            }
     }
 }
