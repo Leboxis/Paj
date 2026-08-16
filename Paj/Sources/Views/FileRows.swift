@@ -6,18 +6,18 @@ import AVKit
 extension FileItem {
     var systemImage: String {
         if isDirectory { return "folder.fill" }
-        if isTextFile { return "doc.text" }
+        if isTextFile { return "doc.text.fill" }
         switch extensionType ?? "" {
-        case "image": return "photo"
-        case "video": return "film"
+        case "image": return "photo.fill"
+        case "video": return "film.fill"
         case "audio": return "music.note"
-        case "pdf": return "doc.richtext"
+        case "pdf": return "doc.richtext.fill"
         case "archive": return "doc.zipper"
-        case "text": return "doc.plaintext"
-        case "spreadsheet": return "tablecells"
-        case "presentation": return "rectangle.on.rectangle"
+        case "text": return "doc.plaintext.fill"
+        case "spreadsheet": return "tablecells.fill"
+        case "presentation": return "rectangle.on.rectangle.fill"
         case "code": return "chevron.left.forwardslash.chevron.right"
-        default: return "doc"
+        default: return "doc.fill"
         }
     }
 
@@ -40,26 +40,42 @@ struct FileIcon: View {
     var size: CGFloat = 28
 
     var body: some View {
-        Image(systemName: item.systemImage)
-            .font(.system(size: size * 0.9))
-            .foregroundStyle(iconColor)
+        if item.isDirectory {
+            Image(systemName: "folder.fill")
+                .font(.system(size: size * 0.95))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: folderColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: folderColors.first?.opacity(0.3) ?? .clear, radius: 2, x: 0, y: 1)
+        } else {
+            Image(systemName: item.systemImage)
+                .font(.system(size: size * 0.9))
+                .foregroundStyle(iconColor)
+        }
+    }
+
+    private var folderColors: [Color] {
+        if let hex = item.color, let c = Color(hex: hex) {
+            return [c, c.opacity(0.8)]
+        }
+        return [Color(hex: "#2F80ED") ?? .blue, Color(hex: "#0056C6") ?? .blue]
     }
 
     private var iconColor: Color {
-        if item.isDirectory {
-            if let hex = item.color, let c = Color(hex: hex) { return c }
-            return Color(hex: "#0098FF")!
-        }
         switch item.extensionType ?? "" {
-        case "image": return .purple
-        case "video": return .orange
-        case "audio": return .pink
-        case "pdf": return .red
-        case "archive": return .brown
-        case "spreadsheet": return .green
-        case "presentation": return .orange
-        case "code": return .blue
-        default: return .secondary
+        case "image": return Color(hex: "#AF52DE") ?? .purple
+        case "video": return Color(hex: "#FF9500") ?? .orange
+        case "audio": return Color(hex: "#FF2D55") ?? .pink
+        case "pdf": return Color(hex: "#FF3B30") ?? .red
+        case "archive": return Color(hex: "#A2845E") ?? .brown
+        case "spreadsheet": return Color(hex: "#34C759") ?? .green
+        case "presentation": return Color(hex: "#FF9500") ?? .orange
+        case "code": return Color(hex: "#007AFF") ?? .blue
+        default: return Color(.secondaryLabel)
         }
     }
 }
@@ -74,30 +90,29 @@ struct FileRow: View {
     @ObservedObject private var categoryStore = CategoryStore.shared
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             if item.isMedia {
-                RemoteThumbnail(file: item, width: 96, height: 96, corner: 6)
-                    .frame(width: 44, height: 44)
+                RemoteThumbnail(file: item, width: 100, height: 100, corner: 10)
+                    .frame(width: 46, height: 46)
             } else {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(.systemGray5).opacity(0.4))
-                    .frame(width: 44, height: 44)
-                    .overlay(FileIcon(item: item, size: 24))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(.systemGray6).opacity(0.8))
+                    .frame(width: 46, height: 46)
+                    .overlay(FileIcon(item: item, size: 26))
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
-                    .font(.body)
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(subtitleText ?? item.subtitle)
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
-
 
             if !item.tagIDs.isEmpty {
                 HStack(spacing: 4) {
@@ -117,11 +132,11 @@ struct FileRow: View {
 
             if item.isDirectory && !selecting {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(Color(.tertiaryLabel))
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
         .contentShape(Rectangle())
     }
 }
@@ -151,7 +166,7 @@ struct SelectionBadge: View {
     }
 }
 
-// MARK: - Cellule de grille
+// MARK: - Cellule de grille (carte moderne)
 
 struct FileGridCell: View {
     let item: FileItem
@@ -160,32 +175,38 @@ struct FileGridCell: View {
     @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             ZStack {
                 if item.isMedia {
-                    RemoteThumbnail(file: item, width: 400, height: 400, corner: 8)
+                    RemoteThumbnail(file: item, width: 400, height: 400, corner: 10)
                 } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.systemGray5).opacity(0.4))
-                        .overlay(FileIcon(item: item, size: 40))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(.systemGray6).opacity(0.8))
+                        .overlay(FileIcon(item: item, size: 36))
                 }
+
                 if item.isVideo {
                     Image(systemName: "play.circle.fill")
-                        .font(.title2)
+                        .font(.system(size: 26))
                         .foregroundStyle(.white)
-                        .shadow(radius: 3)
+                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
                 }
             }
             .aspectRatio(1, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(alignment: .bottomTrailing) {
                 if item.isVideo, let duration = videoStore.formattedDuration(for: item.id) {
-                    Text(duration)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.black.opacity(0.65)))
-                        .padding(5)
+                    HStack(spacing: 3) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 7, weight: .bold))
+                        Text(duration)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.black.opacity(0.65)))
+                    .padding(5)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -195,7 +216,7 @@ struct FileGridCell: View {
                             Circle()
                                 .fill(categoryStore.color(forCategoryID: tagID))
                                 .frame(width: 8, height: 8)
-                                .overlay(Circle().strokeBorder(.white, lineWidth: 1))
+                                .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
                         }
                     }
                     .padding(5)
@@ -204,9 +225,11 @@ struct FileGridCell: View {
             .overlay(alignment: .topTrailing) {
                 if item.isFavorite == true {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
-                        .shadow(color: .black.opacity(0.5), radius: 2)
+                        .padding(4)
+                        .background(Circle().fill(Color.black.opacity(0.45)))
+                        .shadow(radius: 2)
                         .padding(5)
                 }
             }
@@ -215,15 +238,32 @@ struct FileGridCell: View {
                     videoStore.loadMetadata(for: item)
                 }
             }
-            // Hauteur de texte fixe : toutes les cartes ont exactement la
-            // même taille, quel que soit le nom du fichier.
-            Text(item.name)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(height: 16, alignment: .top)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(item.subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(7)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color(.separator).opacity(0.3), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
     }
 }
 
