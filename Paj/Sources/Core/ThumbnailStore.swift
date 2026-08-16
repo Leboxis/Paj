@@ -149,35 +149,38 @@ final class ThumbnailStore {
     }
 }
 
+/// Miniature kdrive chargée de façon asynchrone avec cache.
 struct RemoteThumbnail: View {
     let file: FileItem
     var width: Int
     var height: Int
-    var corner: CGFloat = 8
+    var corner: CGFloat = 12
 
     @State private var image: UIImage?
 
     var body: some View {
-        ZStack {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: file.isVideo ? "video.fill" : "photo.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(file.isVideo ? (Color(hex: "#60A5FA") ?? .blue) : (Color(hex: "#34D399") ?? .green))
+        Rectangle()
+            .fill(OrvianStyle.tertiaryBackground)
+            .overlay {
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: file.isVideo ? "video" : "photo")
+                        .font(.title3)
+                        .foregroundStyle(file.isVideo ? Color(hex: "#60A5FA") ?? .blue : Color(hex: "#34D399") ?? .green)
+                }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .task(id: file.id) {
-            let key = "t_\(file.id)_\(width)x\(height)"
-            image = await ThumbnailStore.shared.image(forKey: key) {
-                try await KDriveClient.shared.thumbnailData(fileId: file.id, width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: corner))
+            .task(id: file.id) {
+                let key = "t_\(file.id)_\(width)x\(height)"
+                image = await ThumbnailStore.shared.image(forKey: key) {
+                    try await KDriveClient.shared.thumbnailData(fileId: file.id, width: width, height: height)
+                }
+                if let img = image, file.isVideo {
+                    await VideoMetadataStore.shared.register(fileId: file.id, imageWidth: img.size.width, imageHeight: img.size.height)
+                }
             }
-            if let img = image, file.isVideo {
-                await VideoMetadataStore.shared.register(fileId: file.id, imageWidth: img.size.width, imageHeight: img.size.height)
-            }
-        }
     }
 }

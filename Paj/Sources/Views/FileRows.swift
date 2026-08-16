@@ -1,51 +1,44 @@
 import SwiftUI
 import AVKit
 
-// MARK: - Icônes SF Symbols par type (Style Orvian)
+// MARK: - Icônes SF Symbols alignées sur Orvian
 
 extension FileItem {
     var systemImage: String {
-        if isDirectory { return "folder.fill" }
-        if isTextFile { return "doc.text.fill" }
-        switch extensionType ?? "" {
-        case "image": return "photo.fill"
-        case "video": return "video.fill"
-        case "audio": return "music.note"
-        case "pdf": return "doc.text.fill"
-        case "archive": return "doc.zipper"
-        case "text": return "doc.text.fill"
-        case "spreadsheet": return "tablecells.fill"
-        case "presentation": return "rectangle.on.rectangle.fill"
-        case "code": return "chevron.left.forwardslash.chevron.right"
-        default: return "doc.text.fill"
-        }
+        if isDirectory { return "folder" }
+        if isImage { return "photo" }
+        if isVideo { return "video" }
+        // Orvian utilise une seule icône FileText pour les documents,
+        // fichiers texte et formats non multimédias.
+        return "doc.text"
     }
 
     var subtitle: String {
         var parts: [String] = []
+        if let date = fileDate {
+            parts.append(date.formatted(date: .abbreviated, time: .omitted))
+        }
         if let s = size, s > 0 {
             parts.append(ByteCountFormatter.string(fromByteCount: Int64(s), countStyle: .file))
-        } else if let date = fileDate {
-            parts.append(date.formatted(date: .abbreviated, time: .omitted))
         }
         return parts.joined(separator: " · ")
     }
 }
 
-// MARK: - Icône stylée par type de fichier (Couleurs & Style Orvian)
+// MARK: - Icône stylée par type de fichier (style Orvian)
 
 struct FileIcon: View {
     let item: FileItem
-    var size: CGFloat = 36
+    var size: CGFloat = 28
 
     var body: some View {
         if item.isDirectory {
-            Image(systemName: "folder.fill")
-                .font(.system(size: size))
+            Image(systemName: "folder")
+                .font(.system(size: size * 0.95))
                 .foregroundStyle(folderColor)
         } else {
             Image(systemName: item.systemImage)
-                .font(.system(size: size))
+                .font(.system(size: size * 0.9))
                 .foregroundStyle(iconColor)
         }
     }
@@ -54,33 +47,13 @@ struct FileIcon: View {
         if let hex = item.color, let c = Color(hex: hex) {
             return c
         }
-        // Orvian folder color: #FBBF24 (warm amber yellow)
         return Color(hex: "#FBBF24") ?? .yellow
     }
 
     private var iconColor: Color {
-        // Couleurs exactes Orvian:
-        // - Image: #34D399 (emerald green)
-        // - Video: #60A5FA (sky blue)
-        // - Text / Document: #94A3B8 (slate gray)
-        // - Audio: #F472B6 (pink)
-        // - Code: #38BDF8 (cyan blue)
-        // - Archive: #F59E0B (amber)
-        // - PDF: #EF4444 (red)
-        switch item.extensionType ?? "" {
-        case "image": return Color(hex: "#34D399") ?? .green
-        case "video": return Color(hex: "#60A5FA") ?? .blue
-        case "audio": return Color(hex: "#F472B6") ?? .pink
-        case "pdf": return Color(hex: "#EF4444") ?? .red
-        case "archive": return Color(hex: "#F59E0B") ?? .orange
-        case "spreadsheet": return Color(hex: "#10B981") ?? .green
-        case "presentation": return Color(hex: "#F59E0B") ?? .orange
-        case "code": return Color(hex: "#38BDF8") ?? .cyan
-        case "text": return Color(hex: "#94A3B8") ?? .gray
-        default:
-            if item.isTextFile { return Color(hex: "#94A3B8") ?? .gray }
-            return Color(hex: "#94A3B8") ?? .secondary
-        }
+        if item.isImage { return Color(hex: "#34D399") ?? .green }
+        if item.isVideo { return Color(hex: "#60A5FA") ?? .blue }
+        return OrvianStyle.textTertiary
     }
 }
 
@@ -96,11 +69,13 @@ struct FileRow: View {
     var body: some View {
         HStack(spacing: 14) {
             if item.isMedia {
-                RemoteThumbnail(file: item, width: 100, height: 100, corner: 8)
-                    .frame(width: 44, height: 44)
+                RemoteThumbnail(file: item, width: 100, height: 100, corner: 10)
+                    .frame(width: 46, height: 46)
             } else {
-                FileIcon(item: item, size: 28)
-                    .frame(width: 44, height: 44)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(OrvianStyle.tertiaryBackground.opacity(0.8))
+                    .frame(width: 46, height: 46)
+                    .overlay(FileIcon(item: item, size: 26))
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -109,9 +84,11 @@ struct FileRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(subtitleText ?? item.subtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
+                if !(subtitleText ?? item.subtitle).isEmpty {
+                    Text(subtitleText ?? item.subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -129,7 +106,7 @@ struct FileRow: View {
             if item.isFavorite == true {
                 Image(systemName: "star.fill")
                     .font(.caption)
-                    .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
+                    .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
             }
 
             if item.isDirectory && !selecting {
@@ -168,7 +145,7 @@ struct SelectionBadge: View {
     }
 }
 
-// MARK: - Cellule de grille (carte style Orvian)
+// MARK: - Cellule de grille (carte moderne)
 
 struct FileGridCell: View {
     let item: FileItem
@@ -181,13 +158,11 @@ struct FileGridCell: View {
             ZStack {
                 if item.isMedia {
                     RemoteThumbnail(file: item, width: 400, height: 400, corner: 10)
-                        .aspectRatio(4/3, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 } else {
-                    // Pas de fond gris derrière l'icône de dossier ou fichier (exactement comme Orvian)
+                    // Les cartes Orvian laissent l'icône respirer sur la surface
+                    // vitrée : aucun carré gris derrière les dossiers/documents.
                     FileIcon(item: item, size: item.isDirectory ? 48 : 44)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .aspectRatio(4/3, contentMode: .fit)
                 }
 
                 if item.isVideo {
@@ -197,12 +172,12 @@ struct FileGridCell: View {
                         .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .aspectRatio(4/3, contentMode: .fit)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(alignment: .bottomTrailing) {
                 if item.isVideo, let duration = videoStore.formattedDuration(for: item.id) {
                     HStack(spacing: 3) {
-                        Image(systemName: "video.fill")
+                        Image(systemName: "play.fill")
                             .font(.system(size: 7, weight: .bold))
                         Text(duration)
                             .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -230,10 +205,12 @@ struct FileGridCell: View {
             .overlay(alignment: .topTrailing) {
                 if item.isFavorite == true {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
-                        .shadow(color: Color.black.opacity(0.7), radius: 3, x: 0, y: 1)
-                        .padding(6)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
+                        .padding(4)
+                        .background(Circle().fill(Color.black.opacity(0.45)))
+                        .shadow(radius: 2)
+                        .padding(5)
                 }
             }
             .task {
@@ -244,29 +221,31 @@ struct FileGridCell: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text(item.subtitle)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
-                    .lineLimit(1)
+                if !item.isDirectory, let size = item.size, size > 0 {
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .padding(.horizontal, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(8)
+        .padding(7)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
+                .fill(OrvianStyle.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(.separator).opacity(0.3), lineWidth: 0.5)
+                .strokeBorder(OrvianStyle.border, lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.04), radius: 5, x: 0, y: 2)
+        .shadow(color: OrvianStyle.shadow, radius: 8, x: 0, y: 4)
     }
 }
 

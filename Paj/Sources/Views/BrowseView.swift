@@ -57,7 +57,7 @@ struct DirectoryView: View {
                 }
             )
         }
-        .background(Color(.systemGroupedBackground))
+        .background(OrvianStyle.background)
         .navigationTitle(directory.name)
         .navigationBarTitleDisplayMode(directory.id == AppConfig.rootDirectoryId ? .large : .inline)
     }
@@ -75,7 +75,7 @@ struct BreadcrumbBar: View {
                     onSelect(-1)
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "house.fill")
+                        Image(systemName: "house")
                             .font(.system(size: 11))
                         Text("Accueil")
                             .font(.system(size: 12, weight: .medium))
