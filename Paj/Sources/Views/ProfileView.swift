@@ -148,15 +148,16 @@ struct ProfileThumb: View {
             if item.isMedia {
                 RemoteThumbnail(file: item, width: 200, height: 200, corner: 8)
             } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.systemGray5).opacity(0.4))
-                    .overlay(FileIcon(item: item, size: 24))
+                FileIcon(item: item, size: item.isDirectory ? 32 : 26)
             }
             if item.isVideo {
-                Image(systemName: "play.circle.fill")
-                    .font(.caption)
+                Image(systemName: "video.fill")
+                    .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(.white)
-                    .shadow(radius: 2)
+                    .padding(3)
+                    .background(Circle().fill(Color.black.opacity(0.65)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(2)
             }
         }
         .frame(width: 64, height: 64)

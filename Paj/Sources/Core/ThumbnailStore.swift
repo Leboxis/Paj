@@ -160,19 +160,19 @@ struct RemoteThumbnail: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color(.systemGray5).opacity(0.4))
+            .fill(Color(hex: "#1B2435") ?? Color(.systemGray6))
             .overlay {
                 if let image {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                 } else {
-                    Image(systemName: file.isVideo ? "video" : "photo")
+                    Image(systemName: file.isVideo ? "video.fill" : "photo.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: corner))
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
             .task(id: file.id) {
                 let key = "t_\(file.id)_\(width)x\(height)"
                 image = await ThumbnailStore.shared.image(forKey: key) {

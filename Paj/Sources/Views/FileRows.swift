@@ -10,15 +10,15 @@ extension FileItem {
         if isTextFile { return "doc.text.fill" }
         switch extensionType ?? "" {
         case "image": return "photo.fill"
-        case "video": return "film.fill"
+        case "video": return "video.fill"
         case "audio": return "music.note"
-        case "pdf": return "doc.richtext.fill"
+        case "pdf": return "doc.text.fill"
         case "archive": return "doc.zipper"
-        case "text": return "doc.plaintext.fill"
+        case "text": return "doc.text.fill"
         case "spreadsheet": return "tablecells.fill"
         case "presentation": return "rectangle.on.rectangle.fill"
         case "code": return "chevron.left.forwardslash.chevron.right"
-        default: return "doc.fill"
+        default: return "doc.text.fill"
         }
     }
 
@@ -55,11 +55,12 @@ struct FileIcon: View {
             Image(systemName: "folder.fill")
                 .font(.system(size: size))
                 .foregroundStyle(folderColor)
-                .shadow(color: folderColor.opacity(0.3), radius: 2, x: 0, y: 1)
+                .shadow(color: folderColor.opacity(0.3), radius: 3, x: 0, y: 2)
         } else {
             Image(systemName: item.systemImage)
                 .font(.system(size: size * 0.92))
                 .foregroundStyle(iconColor)
+                .shadow(color: iconColor.opacity(0.2), radius: 2, x: 0, y: 1)
         }
     }
 
@@ -96,14 +97,12 @@ struct FileRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Conteneur miniature / icône 52x52
+            // Conteneur miniature / icône 50x50 sans fond lourd
             ZStack {
                 if item.isMedia {
-                    RemoteThumbnail(file: item, width: 120, height: 120, corner: 10)
+                    RemoteThumbnail(file: item, width: 140, height: 140, corner: 10)
                 } else {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(hex: "#1B2435") ?? Color(.systemGray6))
-                        .overlay(FileIcon(item: item, size: item.isDirectory ? 26 : 22))
+                    FileIcon(item: item, size: item.isDirectory ? 34 : 28)
                 }
 
                 if item.isVideo {
@@ -112,7 +111,7 @@ struct FileRow: View {
                         HStack {
                             Spacer()
                             Circle()
-                                .fill(Color.black.opacity(0.6))
+                                .fill(Color.black.opacity(0.65))
                                 .frame(width: 16, height: 16)
                                 .overlay(
                                     Image(systemName: "video.fill")
@@ -203,7 +202,7 @@ struct SelectionBadge: View {
     }
 }
 
-// MARK: - Cellule de grille (Carte Orvian `FileCard`)
+// MARK: - Cellule de grille (Carte Orvian `FileCard` avec grandes miniatures et icônes épurées)
 
 struct FileGridCell: View {
     let item: FileItem
@@ -213,16 +212,16 @@ struct FileGridCell: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            // Zone d'aperçu / icône 4:3
+            // Zone d'aperçu / icône sans fond pour les dossiers/fichiers texte, et grande miniature 1:1 pour les médias
             ZStack {
                 if item.isMedia {
-                    RemoteThumbnail(file: item, width: 400, height: 400, corner: 10)
+                    RemoteThumbnail(file: item, width: 500, height: 500, corner: 12)
+                        .aspectRatio(1, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(hex: "#1B2435") ?? Color(.systemGray6))
-                        .overlay(
-                            FileIcon(item: item, size: item.isDirectory ? 40 : 34)
-                        )
+                    FileIcon(item: item, size: item.isDirectory ? 64 : 54)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .aspectRatio(1, contentMode: .fit)
                 }
 
                 // Overlay vidéo Orvian (en bas à droite)
@@ -234,24 +233,23 @@ struct FileGridCell: View {
                             ZStack {
                                 Circle()
                                     .fill(Color.black.opacity(0.65))
-                                    .frame(width: 22, height: 22)
+                                    .frame(width: 24, height: 24)
                                 Image(systemName: "video.fill")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(.white)
                             }
-                            .padding(5)
+                            .padding(6)
                         }
                     }
                 }
             }
-            .aspectRatio(4/3, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .aspectRatio(1, contentMode: .fit)
             .overlay(alignment: .topTrailing) {
                 if item.isFavorite == true {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
-                        .shadow(color: .black.opacity(0.8), radius: 3, x: 0, y: 1)
+                        .shadow(color: .black.opacity(0.85), radius: 3, x: 0, y: 1)
                         .padding(6)
                 }
             }
@@ -298,16 +296,16 @@ struct FileGridCell: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .padding(9)
+        .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(hex: "#111827")?.opacity(0.8) ?? Color(.secondarySystemGroupedBackground))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 3)
     }
 }
 
