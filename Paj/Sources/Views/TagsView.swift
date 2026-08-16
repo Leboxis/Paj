@@ -90,6 +90,11 @@ struct TagsView: View {
             }
             .refreshable { await load(force: true) }
             .task { await load() }
+            .onReceive(NotificationCenter.default.publisher(for: .pajTabSelected)) { note in
+                if Notification.Name.isTabSelected(note, .tags) {
+                    Task { await load() }
+                }
+            }
         }
     }
 

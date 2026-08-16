@@ -1,5 +1,15 @@
 import SwiftUI
 
+extension Notification.Name {
+    /// Émise quand un onglet devient actif (les vues restent montées dans le
+    /// ZStack, donc leurs onAppear/.task ne se re-déclenchent pas seuls).
+    static let pajTabSelected = Notification.Name("pajTabSelected")
+
+    static func isTabSelected(_ note: Notification, _ tab: MainTab) -> Bool {
+        (note.object as? String) == tab.rawValue
+    }
+}
+
 enum MainTab: String, CaseIterable, Identifiable {
     case settings
     case tags
@@ -63,6 +73,9 @@ struct MainTabView: View {
         .tint(.accentColor)
         .onAppear {
             selectedTab = .home
+        }
+        .onChange(of: selectedTab) { _, tab in
+            NotificationCenter.default.post(name: .pajTabSelected, object: tab.rawValue)
         }
         .task {
             await CategoryStore.shared.loadIfNeeded()

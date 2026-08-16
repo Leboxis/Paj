@@ -66,6 +66,11 @@ struct SettingsView: View {
             }
             .navigationTitle("Réglages")
             .onAppear { cacheSize = ThumbnailStore.shared.formattedSize() }
+            .onReceive(NotificationCenter.default.publisher(for: .pajTabSelected)) { note in
+                if Notification.Name.isTabSelected(note, .settings) {
+                    cacheSize = ThumbnailStore.shared.formattedSize()
+                }
+            }
             .sheet(isPresented: $showEditConfig) {
                 SetupView(existing: true)
                     .environmentObject(appState)

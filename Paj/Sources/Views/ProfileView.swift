@@ -20,6 +20,11 @@ struct ProfileView: View {
             .navigationTitle("Profil")
             .refreshable { await loadAll() }
             .task { await loadAll() }
+            .onReceive(NotificationCenter.default.publisher(for: .pajTabSelected)) { note in
+                if Notification.Name.isTabSelected(note, .profile) {
+                    Task { await loadAll() }
+                }
+            }
             .overlay {
                 if loading {
                     ProgressView()
