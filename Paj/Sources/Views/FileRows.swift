@@ -1,47 +1,19 @@
 import SwiftUI
 import AVKit
 
-// MARK: - Sous-titre (taille, sinon date) pour les lignes de liste
+// MARK: - Icônes SF Symbols par type
 
 extension FileItem {
-    var subtitle: String {
-        var parts: [String] = []
-        if let s = size, s > 0 {
-            parts.append(ByteCountFormatter.string(fromByteCount: Int64(s), countStyle: .file))
-        } else if let date = fileDate {
-            parts.append(date.formatted(date: .abbreviated, time: .omitted))
-        }
-        return parts.joined(separator: " · ")
-    }
-}
-
-// MARK: - Icône badge coloré par type de fichier
-
-struct FileIcon: View {
-    let item: FileItem
-    var size: CGFloat = 36
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                .fill(badgeColor)
-            Image(systemName: glyph)
-                .font(.system(size: size * 0.52, weight: .medium))
-                .foregroundStyle(.white)
-        }
-        .frame(width: size, height: size)
-    }
-
-    private var glyph: String {
-        if item.isDirectory { return "folder.fill" }
-        if item.isTextFile { return "doc.text" }
-        switch item.extensionType ?? "" {
-        case "image": return "photo.fill"
-        case "video": return "video.fill"
+    var systemImage: String {
+        if isDirectory { return "folder.fill" }
+        if isTextFile { return "doc.text" }
+        switch extensionType ?? "" {
+        case "image": return "photo"
+        case "video": return "film"
         case "audio": return "music.note"
-        case "pdf": return "doc.text.fill"
+        case "pdf": return "doc.richtext"
         case "archive": return "doc.zipper"
-        case "text": return "doc.text"
+        case "text": return "doc.plaintext"
         case "spreadsheet": return "tablecells"
         case "presentation": return "rectangle.on.rectangle"
         case "code": return "chevron.left.forwardslash.chevron.right"
@@ -49,23 +21,45 @@ struct FileIcon: View {
         }
     }
 
-    private var badgeColor: Color {
+    var subtitle: String {
+        var parts: [String] = []
+        if let date = fileDate {
+            parts.append(date.formatted(date: .abbreviated, time: .omitted))
+        }
+        if let s = size, s > 0 {
+            parts.append(ByteCountFormatter.string(fromByteCount: Int64(s), countStyle: .file))
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - Icône stylée par type de fichier
+
+struct FileIcon: View {
+    let item: FileItem
+    var size: CGFloat = 28
+
+    var body: some View {
+        Image(systemName: item.systemImage)
+            .font(.system(size: size * 0.9))
+            .foregroundStyle(iconColor)
+    }
+
+    private var iconColor: Color {
         if item.isDirectory {
-            if let hex = item.color, let c = Color(hex: hex) {
-                return c
-            }
-            return Color(hex: "#F5A623") ?? .orange
+            if let hex = item.color, let c = Color(hex: hex) { return c }
+            return Color(hex: "#0098FF")!
         }
         switch item.extensionType ?? "" {
-        case "image": return Color(hex: "#0D9488") ?? .teal
-        case "video": return Color(hex: "#3B82F6") ?? .blue
-        case "audio": return Color(hex: "#EC4899") ?? .pink
-        case "pdf": return Color(hex: "#EF4444") ?? .red
-        case "archive": return Color(hex: "#D97706") ?? .orange
-        case "spreadsheet": return Color(hex: "#059669") ?? .green
-        case "presentation": return Color(hex: "#D97706") ?? .orange
-        case "code": return Color(hex: "#0284C7") ?? .cyan
-        default: return Color(hex: "#64748B") ?? .gray
+        case "image": return .purple
+        case "video": return .orange
+        case "audio": return .pink
+        case "pdf": return .red
+        case "archive": return .brown
+        case "spreadsheet": return .green
+        case "presentation": return .orange
+        case "code": return .blue
+        default: return .secondary
         }
     }
 }
@@ -80,27 +74,30 @@ struct FileRow: View {
     @ObservedObject private var categoryStore = CategoryStore.shared
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             if item.isMedia {
-                RemoteThumbnail(file: item, width: 100, height: 100, corner: 8)
+                RemoteThumbnail(file: item, width: 96, height: 96, corner: 6)
                     .frame(width: 44, height: 44)
             } else {
-                FileIcon(item: item, size: 32)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(.systemGray5).opacity(0.4))
                     .frame(width: 44, height: 44)
+                    .overlay(FileIcon(item: item, size: 24))
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.body)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(subtitleText ?? item.subtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
+
 
             if !item.tagIDs.isEmpty {
                 HStack(spacing: 4) {
@@ -115,16 +112,16 @@ struct FileRow: View {
             if item.isFavorite == true {
                 Image(systemName: "star.fill")
                     .font(.caption)
-                    .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
+                    .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
             }
 
             if item.isDirectory && !selecting {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Color(.tertiaryLabel))
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
     }
 }
@@ -154,7 +151,7 @@ struct SelectionBadge: View {
     }
 }
 
-// MARK: - Cellule de grille (carte de taille uniforme)
+// MARK: - Cellule de grille
 
 struct FileGridCell: View {
     let item: FileItem
@@ -163,111 +160,70 @@ struct FileGridCell: View {
     @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     var body: some View {
-        VStack(spacing: 7) {
-            mediaZone
-
+        VStack(spacing: 5) {
+            ZStack {
+                if item.isMedia {
+                    RemoteThumbnail(file: item, width: 400, height: 400, corner: 8)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(.systemGray5).opacity(0.4))
+                        .overlay(FileIcon(item: item, size: 40))
+                }
+                if item.isVideo {
+                    Image(systemName: "play.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .shadow(radius: 3)
+                }
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(alignment: .bottomTrailing) {
+                if item.isVideo, let duration = videoStore.formattedDuration(for: item.id) {
+                    Text(duration)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.black.opacity(0.65)))
+                        .padding(5)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if !item.tagIDs.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(item.tagIDs.prefix(3), id: \.self) { tagID in
+                            Circle()
+                                .fill(categoryStore.color(forCategoryID: tagID))
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().strokeBorder(.white, lineWidth: 1))
+                        }
+                    }
+                    .padding(5)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if item.isFavorite == true {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
+                        .shadow(color: .black.opacity(0.5), radius: 2)
+                        .padding(5)
+                }
+            }
+            .task {
+                if item.isVideo {
+                    videoStore.loadMetadata(for: item)
+                }
+            }
+            // Hauteur de texte fixe : toutes les cartes ont exactement la
+            // même taille, quel que soit le nom du fichier.
             Text(item.name)
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(height: 15)
-                .frame(maxWidth: .infinity)
-
-            Text(weightText)
-                .font(.system(size: 10))
-                .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
-                .lineLimit(1)
-                .frame(height: 13)
-                .frame(maxWidth: .infinity)
+                .frame(height: 16, alignment: .top)
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(.separator).opacity(0.3), lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.04), radius: 5, x: 0, y: 2)
-    }
-
-    /// Zone visuelle 4:3 : miniature à 95 % de la largeur ou icône centrée,
-    /// même gabarit pour toutes les cartes.
-    private var mediaZone: some View {
-        ZStack {
-            GeometryReader { geo in
-                Group {
-                    if item.isMedia {
-                        RemoteThumbnail(file: item, width: 400, height: 300, corner: 10)
-                            .frame(width: geo.size.width * 0.95, height: geo.size.height * 0.95)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    } else {
-                        FileIcon(item: item, size: 48)
-                    }
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-            }
-
-            if item.isVideo {
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
-            }
-        }
-        .aspectRatio(4 / 3, contentMode: .fit)
-        .overlay(alignment: .bottomTrailing) {
-            if item.isVideo, let duration = videoStore.formattedDuration(for: item.id) {
-                HStack(spacing: 3) {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: 7, weight: .bold))
-                    Text(duration)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(Color.black.opacity(0.65)))
-                .padding(5)
-            }
-        }
-        .overlay(alignment: .bottomLeading) {
-            if !item.tagIDs.isEmpty {
-                HStack(spacing: 3) {
-                    ForEach(item.tagIDs.prefix(3), id: \.self) { tagID in
-                        Circle()
-                            .fill(categoryStore.color(forCategoryID: tagID))
-                            .frame(width: 8, height: 8)
-                            .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
-                    }
-                }
-                .padding(5)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if item.isFavorite == true {
-                Image(systemName: "star.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
-                    .shadow(color: Color.black.opacity(0.7), radius: 3, x: 0, y: 1)
-                    .padding(6)
-            }
-        }
-        .task {
-            if item.isVideo {
-                videoStore.loadMetadata(for: item)
-            }
-        }
-    }
-
-    /// Poids du fichier uniquement (pas de date) ; « Dossier » si sans taille.
-    private var weightText: String {
-        if let s = item.size, s > 0 {
-            return ByteCountFormatter.string(fromByteCount: Int64(s), countStyle: .file)
-        }
-        return item.isDirectory ? "Dossier" : "—"
     }
 }
 

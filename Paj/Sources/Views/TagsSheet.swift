@@ -13,7 +13,7 @@ struct TagsSheet: View {
     @State private var loading = true
     @State private var busy = false
     @State private var newName = ""
-    @State private var selectedColor: Color = Color(hex: "#FF9500") ?? .orange
+    @State private var newColor = "#FF9500"
     @State private var errorText: String?
 
     private let palette = ["#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#00C7BE",
@@ -67,19 +67,16 @@ struct TagsSheet: View {
                 Section("Nouveau tag") {
                     TextField("Nom du tag", text: $newName)
                         .textInputAutocapitalization(.words)
-                    ColorPicker("Couleur du tag", selection: $selectedColor, supportsOpacity: false)
                     HStack(spacing: 10) {
                         ForEach(palette, id: \.self) { hex in
                             Button {
-                                if let c = Color(hex: hex) {
-                                    selectedColor = c
-                                }
+                                newColor = hex
                             } label: {
                                 ZStack {
                                     Circle()
                                         .fill(Color(hex: hex) ?? .gray)
                                         .frame(width: 28, height: 28)
-                                    if selectedColor.hexString.uppercased() == hex.uppercased() {
+                                    if newColor == hex {
                                         Circle()
                                             .strokeBorder(Color.primary, lineWidth: 2)
                                             .frame(width: 33, height: 33)
@@ -151,7 +148,7 @@ struct TagsSheet: View {
     private func createAndAssign() {
         busy = true
         let name = newName.trimmingCharacters(in: .whitespaces)
-        let color = selectedColor.hexString
+        let color = newColor
         let ids = fileIds
         Task { @MainActor in
             do {

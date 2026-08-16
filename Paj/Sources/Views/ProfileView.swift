@@ -20,11 +20,6 @@ struct ProfileView: View {
             .navigationTitle("Profil")
             .refreshable { await loadAll() }
             .task { await loadAll() }
-            .onReceive(NotificationCenter.default.publisher(for: .pajTabSelected)) { note in
-                if Notification.Name.isTabSelected(note, .profile) {
-                    Task { await loadAll() }
-                }
-            }
             .overlay {
                 if loading {
                     ProgressView()
@@ -153,7 +148,9 @@ struct ProfileThumb: View {
             if item.isMedia {
                 RemoteThumbnail(file: item, width: 200, height: 200, corner: 8)
             } else {
-                FileIcon(item: item, size: 28)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemGray5).opacity(0.4))
+                    .overlay(FileIcon(item: item, size: 24))
             }
             if item.isVideo {
                 Image(systemName: "play.circle.fill")

@@ -190,8 +190,6 @@ struct FileCategoryLink: Codable, Hashable {
     }
 }
 
-import UIKit
-
 extension Color {
     /// Couleur depuis une chaîne hexadécimale « #RRGGBB » (format kdrive).
     init?(hex: String?) {
@@ -203,32 +201,5 @@ extension Color {
                   red: Double((v >> 16) & 0xFF) / 255.0,
                   green: Double((v >> 8) & 0xFF) / 255.0,
                   blue: Double(v & 0xFF) / 255.0)
-    }
-
-    /// Convertit une couleur SwiftUI en code hexadécimal « #RRGGBB » pour l'API kdrive.
-    var hexString: String {
-        let uiColor = UIColor(self)
-        var r: CGFloat = 0
-        var g: CGFloat = 0
-        var b: CGFloat = 0
-        var a: CGFloat = 0
-        if uiColor.getRed(&r, green: &g, blue: &b, alpha: &a) {
-            let red = Int(round(max(0, min(1, r)) * 255))
-            let green = Int(round(max(0, min(1, g)) * 255))
-            let blue = Int(round(max(0, min(1, b)) * 255))
-            return String(format: "#%02X%02X%02X", red, green, blue)
-        }
-        if let components = uiColor.cgColor.components {
-            if components.count >= 3 {
-                let red = Int(round(max(0, min(1, components[0])) * 255))
-                let green = Int(round(max(0, min(1, components[1])) * 255))
-                let blue = Int(round(max(0, min(1, components[2])) * 255))
-                return String(format: "#%02X%02X%02X", red, green, blue)
-            } else if components.count >= 1 {
-                let val = Int(round(max(0, min(1, components[0])) * 255))
-                return String(format: "#%02X%02X%02X", val, val, val)
-            }
-        }
-        return "#FF9500"
     }
 }

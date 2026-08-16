@@ -2,26 +2,6 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-// MARK: - Filtre rapide par type de fichier
-
-enum FileTypeFilter: String, CaseIterable, Identifiable {
-    case all = "Tous"
-    case folders = "Dossiers"
-    case media = "Médias"
-    case documents = "Documents"
-
-    var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .all: return "square.grid.2x2.fill"
-        case .folders: return "folder.fill"
-        case .media: return "photo.fill"
-        case .documents: return "doc.text.fill"
-        }
-    }
-}
-
 /// Contenu d'onglet générique : liste ou grille (bascule en toolbar), tri
 /// serveur & durée vidéo, filtre d'orientation vidéo (boutons icônes seuls),
 /// recherche globale multi-mots, création de dossiers, import de photos/vidéos/fichiers via DocumentPicker natif,
@@ -42,7 +22,6 @@ struct FileListView: View {
     @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     @State private var searchQuery = ""
-    @State private var selectedTypeFilter: FileTypeFilter = .all
     @State private var selectedOrientation: VideoOrientation?
     @State private var viewerShown = false
     @State private var viewerIndex = 0
@@ -88,29 +67,8 @@ struct FileListView: View {
         !displayedItems.isEmpty && displayedItems.allSatisfy { selection.ids.contains($0.id) }
     }
 
-    private var filterCounts: [FileTypeFilter: Int] {
-        var counts: [FileTypeFilter: Int] = [:]
-        let items = model.items
-        counts[.all] = items.count
-        counts[.folders] = items.filter { $0.isDirectory }.count
-        counts[.media] = items.filter { $0.isMedia }.count
-        counts[.documents] = items.filter { !$0.isMedia && !$0.isDirectory }.count
-        return counts
-    }
-
     private var displayedItems: [FileItem] {
         var items = model.items
-
-        switch selectedTypeFilter {
-        case .all:
-            break
-        case .folders:
-            items = items.filter { $0.isDirectory }
-        case .media:
-            items = items.filter { $0.isMedia }
-        case .documents:
-            items = items.filter { !$0.isMedia && !$0.isDirectory }
-        }
 
         if let orientation = selectedOrientation {
             items = items.filter { item in
@@ -177,8 +135,6 @@ struct FileListView: View {
                 displayedCount: displayedItems.count,
                 selectionActive: selection.isActive,
                 searchQuery: searchQuery,
-                selectedTypeFilter: selectedTypeFilter,
-                onResetTypeFilter: { selectedTypeFilter = .all },
                 isDownloading: isDownloading,
                 isImporting: isImporting
             ))
@@ -323,43 +279,33 @@ struct FileListView: View {
 
     @ViewBuilder
     private var listContent: some View {
-        VStack(spacing: 0) {
-            if !selection.isActive && !model.items.isEmpty {
-                QuickTypeFilterBar(selectedFilter: $selectedTypeFilter, counts: filterCounts)
-                    .background(Color(.systemGroupedBackground))
-            }
-
-            if gridView {
-                ScrollView {
-                    orientationFilterBar
-                    LazyVGrid(columns: gridColumns, spacing: 10) {
-                        ForEach(displayedItems) { item in
-                            gridCell(item)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 4)
-                    .padding(.bottom, 14)
-                    footer
-                }
-                .background(Color(.systemGroupedBackground))
-            } else {
-                List {
-                    Section {
-                        orientationFilterBar
-                    }
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-
+        if gridView {
+            ScrollView {
+                orientationFilterBar
+                LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(displayedItems) { item in
-                        row(item)
+                        gridCell(item)
                     }
-                    footer
                 }
-                .listStyle(.insetGrouped)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+                footer
             }
+        } else {
+            List {
+                Section {
+                    orientationFilterBar
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+
+                ForEach(displayedItems) { item in
+                    row(item)
+                }
+                footer
+            }
+            .listStyle(.insetGrouped)
         }
-        .background(Color(.systemGroupedBackground))
     }
 
 
@@ -743,8 +689,6 @@ private struct FileOverlaysModifier: ViewModifier {
     var displayedCount: Int
     var selectionActive: Bool
     var searchQuery: String
-    var selectedTypeFilter: FileTypeFilter
-    var onResetTypeFilter: () -> Void
     var isDownloading: Bool
     var isImporting: Bool
 
@@ -757,28 +701,9 @@ private struct FileOverlaysModifier: ViewModifier {
             }
             .overlay {
                 if displayedCount == 0 && !model.isLoading && model.errorMessage == nil && !selectionActive {
-                    if selectedTypeFilter != .all {
-                        ContentUnavailableView {
-                            Label("Aucun élément", systemImage: selectedTypeFilter.icon)
-                        } description: {
-                            Text("Aucun élément ne correspond au filtre « \(selectedTypeFilter.rawValue) ».")
-                        } actions: {
-                            Button("Afficher tous les fichiers") {
-                                withAnimation {
-                                    onResetTypeFilter()
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    } else if !searchQuery.isEmpty {
-                        ContentUnavailableView("Aucun résultat",
-                                               systemImage: "magnifyingglass",
-                                               description: Text("Aucun fichier ne correspond à votre recherche."))
-                    } else {
-                        ContentUnavailableView("Dossier vide",
-                                               systemImage: "folder",
-                                               description: Text("Ce dossier ne contient aucun fichier."))
-                    }
+                    ContentUnavailableView(searchQuery.isEmpty ? "Vide" : "Aucun résultat",
+                                           systemImage: searchQuery.isEmpty ? "tray" : "magnifyingglass",
+                                           description: searchQuery.isEmpty ? nil : Text("Aucun fichier trouvé"))
                 }
             }
             .overlay {
@@ -796,59 +721,6 @@ private struct FileOverlaysModifier: ViewModifier {
                     }
                 }
             }
-    }
-}
-
-private struct QuickTypeFilterBar: View {
-    @Binding var selectedFilter: FileTypeFilter
-    var counts: [FileTypeFilter: Int]? = nil
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(FileTypeFilter.allCases) { filter in
-                    let isSelected = selectedFilter == filter
-                    Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                            selectedFilter = filter
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: filter.icon)
-                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                            Text(filter.rawValue)
-                                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                            if let counts, let count = counts[filter], count > 0 {
-                                Text("\(count)")
-                                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1.5)
-                                    .background(
-                                        Capsule()
-                                            .fill(isSelected ? Color.white.opacity(0.25) : Color(.systemGray5))
-                                    )
-                            }
-                        }
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 7)
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-                        )
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(isSelected ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
-                        )
-                        .shadow(color: isSelected ? Color.accentColor.opacity(0.25) : Color.black.opacity(0.02),
-                                radius: isSelected ? 4 : 1, x: 0, y: 1)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-        }
     }
 }
 
