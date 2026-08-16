@@ -34,12 +34,8 @@ struct FileItem: Identifiable, Hashable, Codable {
         Set(tagIDs)
     }
 
-    var isImage: Bool {
-        mimeType?.hasPrefix("image/") == true || extensionType == "image"
-    }
-    var isVideo: Bool {
-        mimeType?.hasPrefix("video/") == true || extensionType == "video"
-    }
+    var isImage: Bool { mimeType?.hasPrefix("image/") ?? false }
+    var isVideo: Bool { mimeType?.hasPrefix("video/") ?? false }
     var isMedia: Bool { isImage || isVideo }
 
     /// Fichiers texte éditables (.txt, .md, .log ou mime text/*).

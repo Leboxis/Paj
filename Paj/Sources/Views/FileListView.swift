@@ -15,9 +15,9 @@ enum FileTypeFilter: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .all: return "square.grid.2x2.fill"
-        case .folders: return "folder"
-        case .media: return "photo"
-        case .documents: return "doc.text"
+        case .folders: return "folder.fill"
+        case .media: return "photo.fill"
+        case .documents: return "doc.text.fill"
         }
     }
 }
@@ -278,7 +278,7 @@ struct FileListView: View {
                         newFolderName = ""
                         showingNewFolder = true
                     } label: {
-                        Label("Nouveau dossier", systemImage: "folder")
+                        Label("Nouveau dossier", systemImage: "folder.badge.plus")
                     }
                     Button {
                         showingPhotosPicker = true
@@ -288,7 +288,7 @@ struct FileListView: View {
                     Button {
                         showingFileImporter = true
                     } label: {
-                        Label("Importer un fichier…", systemImage: "doc.text")
+                        Label("Importer un fichier…", systemImage: "doc.badge.plus")
                     }
                 } label: {
                     Image(systemName: "plus")
@@ -326,7 +326,7 @@ struct FileListView: View {
         VStack(spacing: 0) {
             if !selection.isActive && !model.items.isEmpty {
                 QuickTypeFilterBar(selectedFilter: $selectedTypeFilter, counts: filterCounts)
-                    .background(OrvianStyle.background)
+                    .background(Color(.systemGroupedBackground))
             }
 
             if gridView {
@@ -342,7 +342,7 @@ struct FileListView: View {
                     .padding(.bottom, 14)
                     footer
                 }
-                .background(OrvianStyle.background)
+                .background(Color(.systemGroupedBackground))
             } else {
                 List {
                     Section {
@@ -359,7 +359,7 @@ struct FileListView: View {
                 .listStyle(.insetGrouped)
             }
         }
-        .background(OrvianStyle.background)
+        .background(Color(.systemGroupedBackground))
     }
 
 
@@ -791,7 +791,7 @@ private struct FileOverlaysModifier: ViewModifier {
                                 .font(.subheadline.weight(.medium))
                         }
                         .padding(20)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(OrvianStyle.cardBackground))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemGroupedBackground)))
                         .shadow(radius: 6)
                     }
                 }
@@ -825,22 +825,22 @@ private struct QuickTypeFilterBar: View {
                                     .padding(.vertical, 1.5)
                                     .background(
                                         Capsule()
-                                    .fill(isSelected ? Color.white.opacity(0.25) : Color.white.opacity(0.10))
+                                            .fill(isSelected ? Color.white.opacity(0.25) : Color(.systemGray5))
                                     )
                             }
                         }
                         .padding(.horizontal, 13)
                         .padding(.vertical, 7)
-                        .foregroundStyle(isSelected ? Color.white : OrvianStyle.textSecondary)
+                        .foregroundStyle(isSelected ? Color.white : Color.primary)
                         .background(
                             Capsule()
-                                .fill(isSelected ? OrvianStyle.accent : OrvianStyle.cardBackground)
+                                .fill(isSelected ? Color.accentColor : Color(.secondarySystemGroupedBackground))
                         )
                         .overlay(
                             Capsule()
-                                .strokeBorder(isSelected ? Color.clear : OrvianStyle.border, lineWidth: 0.5)
+                                .strokeBorder(isSelected ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
                         )
-                        .shadow(color: isSelected ? OrvianStyle.accent.opacity(0.25) : OrvianStyle.shadow.opacity(0.2),
+                        .shadow(color: isSelected ? Color.accentColor.opacity(0.25) : Color.black.opacity(0.02),
                                 radius: isSelected ? 4 : 1, x: 0, y: 1)
                     }
                     .buttonStyle(.plain)
@@ -877,11 +877,11 @@ private struct OrientationFilterBarWrapper: View {
                             .frame(width: 44, height: 32)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(selectedOrientation == orientation ? OrvianStyle.accent : OrvianStyle.cardBackground)
+                                    .fill(selectedOrientation == orientation ? Color.accentColor : Color(.secondarySystemGroupedBackground))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(selectedOrientation == orientation ? Color.clear : OrvianStyle.border, lineWidth: 0.5)
+                                    .strokeBorder(selectedOrientation == orientation ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
                             )
                     }
                     .buttonStyle(.plain)

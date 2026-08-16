@@ -98,7 +98,7 @@ private struct PickerDirectoryList: View {
                         }
                     } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: "folder")
+                            Image(systemName: "folder.fill")
                                 .font(.title3)
                                 .foregroundStyle(Color(hex: item.color) ?? (Color(hex: "#FBBF24") ?? .yellow))
                             Text(item.name)
