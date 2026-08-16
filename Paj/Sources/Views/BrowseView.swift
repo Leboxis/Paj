@@ -57,7 +57,7 @@ struct DirectoryView: View {
                 }
             )
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color(hex: "#080C14") ?? Color(.systemBackground))
         .navigationTitle(directory.name)
         .navigationBarTitleDisplayMode(directory.id == AppConfig.rootDirectoryId ? .large : .inline)
     }
@@ -70,7 +70,7 @@ struct BreadcrumbBar: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Button {
                     onSelect(-1)
                 } label: {
@@ -80,14 +80,14 @@ struct BreadcrumbBar: View {
                         Text("Accueil")
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color(hex: "#3B82F6") ?? Color.accentColor)
                 }
                 .buttonStyle(.plain)
 
                 ForEach(Array(path.enumerated()), id: \.element.id) { index, item in
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color(.tertiaryLabel))
+                        .foregroundStyle(Color(hex: "#7F8AA0")?.opacity(0.6) ?? Color(.tertiaryLabel))
 
                     let isLast = index == path.count - 1
                     Button {
@@ -97,7 +97,7 @@ struct BreadcrumbBar: View {
                     } label: {
                         Text(item.name)
                             .font(.system(size: 12, weight: isLast ? .bold : .medium))
-                            .foregroundStyle(isLast ? Color.primary : Color.accentColor)
+                            .foregroundStyle(isLast ? Color.white : (Color(hex: "#3B82F6") ?? Color.accentColor))
                             .lineLimit(1)
                     }
                     .buttonStyle(.plain)
@@ -107,11 +107,11 @@ struct BreadcrumbBar: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
         }
-        .background(Color(.secondarySystemGroupedBackground).opacity(0.9))
+        .background(Color(hex: "#111827")?.opacity(0.9) ?? Color(.secondarySystemGroupedBackground))
         .overlay(
             Rectangle()
-                .frame(height: 0.5)
-                .foregroundStyle(Color(.separator).opacity(0.35)),
+                .frame(height: 1)
+                .foregroundStyle(Color.white.opacity(0.08)),
             alignment: .bottom
         )
     }

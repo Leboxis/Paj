@@ -1,7 +1,4 @@
-import SwiftUI
-import AVKit
-
-// MARK: - Icônes SF Symbols par type
+// MARK: - Icônes SF Symbols et Couleurs Orvian par type
 
 extension FileItem {
     var systemImage: String {
@@ -21,19 +18,29 @@ extension FileItem {
         }
     }
 
+    var orvianMeta: String? {
+        if isDirectory { return nil }
+        guard let s = size, s > 0 else { return nil }
+        if s < 1024 * 1024 {
+            return "\(max(1, Int(round(Double(s) / 1024.0)))) KB"
+        } else {
+            return String(format: "%.2f MB", Double(s) / (1024.0 * 1024.0))
+        }
+    }
+
     var subtitle: String {
         var parts: [String] = []
+        if let meta = orvianMeta {
+            parts.append(meta)
+        }
         if let date = fileDate {
             parts.append(date.formatted(date: .abbreviated, time: .omitted))
         }
-        if let s = size, s > 0 {
-            parts.append(ByteCountFormatter.string(fromByteCount: Int64(s), countStyle: .file))
-        }
-        return parts.joined(separator: " · ")
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
     }
 }
 
-// MARK: - Icône stylée par type de fichier
+// MARK: - Icône stylée par type de fichier (Palette Orvian)
 
 struct FileIcon: View {
     let item: FileItem
@@ -42,45 +49,39 @@ struct FileIcon: View {
     var body: some View {
         if item.isDirectory {
             Image(systemName: "folder.fill")
-                .font(.system(size: size * 0.95))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: folderColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: folderColors.first?.opacity(0.3) ?? .clear, radius: 2, x: 0, y: 1)
+                .font(.system(size: size))
+                .foregroundStyle(folderColor)
+                .shadow(color: folderColor.opacity(0.3), radius: 2, x: 0, y: 1)
         } else {
             Image(systemName: item.systemImage)
-                .font(.system(size: size * 0.9))
+                .font(.system(size: size * 0.92))
                 .foregroundStyle(iconColor)
         }
     }
 
-    private var folderColors: [Color] {
+    private var folderColor: Color {
         if let hex = item.color, let c = Color(hex: hex) {
-            return [c, c.opacity(0.8)]
+            return c
         }
-        return [Color(hex: "#2F80ED") ?? .blue, Color(hex: "#0056C6") ?? .blue]
+        return Color(hex: "#FBBF24") ?? .yellow // Orvian icon-folder: Amber Gold
     }
 
     private var iconColor: Color {
         switch item.extensionType ?? "" {
-        case "image": return Color(hex: "#AF52DE") ?? .purple
-        case "video": return Color(hex: "#FF9500") ?? .orange
-        case "audio": return Color(hex: "#FF2D55") ?? .pink
-        case "pdf": return Color(hex: "#FF3B30") ?? .red
-        case "archive": return Color(hex: "#A2845E") ?? .brown
-        case "spreadsheet": return Color(hex: "#34C759") ?? .green
-        case "presentation": return Color(hex: "#FF9500") ?? .orange
-        case "code": return Color(hex: "#007AFF") ?? .blue
-        default: return Color(.secondaryLabel)
+        case "image": return Color(hex: "#34D399") ?? .green // Orvian icon-image: Emerald Mint
+        case "video": return Color(hex: "#60A5FA") ?? .blue  // Orvian icon-video: Sky Blue
+        case "audio": return Color(hex: "#F472B6") ?? .pink  // Orvian icon-audio: Pink
+        case "pdf": return Color(hex: "#EF4444") ?? .red     // Ruby Red
+        case "archive": return Color(hex: "#A2845E") ?? .brown // Mocha Bronze
+        case "spreadsheet": return Color(hex: "#34D399") ?? .green
+        case "presentation": return Color(hex: "#F59E0B") ?? .orange
+        case "code": return Color(hex: "#38BDF8") ?? .cyan
+        default: return Color(hex: "#7F8AA0") ?? .secondary // Orvian icon-file: Slate
         }
     }
 }
 
-// MARK: - Ligne de liste standard
+// MARK: - Ligne de liste (Style Orvian)
 
 struct FileRow: View {
     let item: FileItem
@@ -90,50 +91,82 @@ struct FileRow: View {
     @ObservedObject private var categoryStore = CategoryStore.shared
 
     var body: some View {
-        HStack(spacing: 14) {
-            if item.isMedia {
-                RemoteThumbnail(file: item, width: 100, height: 100, corner: 10)
-                    .frame(width: 46, height: 46)
-            } else {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(.systemGray6).opacity(0.8))
-                    .frame(width: 46, height: 46)
-                    .overlay(FileIcon(item: item, size: 26))
+        HStack(spacing: 12) {
+            // Conteneur miniature / icône 52x52
+            ZStack {
+                if item.isMedia {
+                    RemoteThumbnail(file: item, width: 120, height: 120, corner: 10)
+                } else {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(hex: "#1B2435") ?? Color(.systemGray6))
+                        .overlay(FileIcon(item: item, size: item.isDirectory ? 26 : 22))
+                }
+
+                if item.isVideo {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Circle()
+                                .fill(Color.black.opacity(0.6))
+                                .frame(width: 16, height: 16)
+                                .overlay(
+                                    Image(systemName: "video.fill")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(.white)
+                                )
+                                .padding(3)
+                        }
+                    }
+                }
             }
+            .frame(width: 50, height: 50)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(subtitleText ?? item.subtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
 
-            Spacer()
+                HStack(spacing: 6) {
+                    Text(subtitleText ?? (item.orvianMeta ?? item.subtitle))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
 
-            if !item.tagIDs.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(item.tagIDs.prefix(3), id: \.self) { tagID in
-                        Circle()
-                            .fill(categoryStore.color(forCategoryID: tagID))
-                            .frame(width: 8, height: 8)
+                    if !item.tagIDs.isEmpty {
+                        HStack(spacing: 3) {
+                            ForEach(item.tagIDs.prefix(2), id: \.self) { tagID in
+                                let cat = categoryStore.category(withID: tagID)
+                                let col = categoryStore.color(forCategoryID: tagID)
+                                Text(cat?.name ?? "Tag")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(col)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(col.opacity(0.16))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().strokeBorder(col.opacity(0.38), lineWidth: 0.5))
+                            }
+                        }
                     }
                 }
             }
 
+            Spacer()
+
             if item.isFavorite == true {
                 Image(systemName: "star.fill")
-                    .font(.caption)
-                    .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
+                    .shadow(color: .black.opacity(0.6), radius: 2)
             }
 
             if item.isDirectory && !selecting {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color(.tertiaryLabel))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#7F8AA0") ?? Color(.tertiaryLabel))
             }
         }
         .padding(.vertical, 3)
@@ -150,23 +183,23 @@ struct SelectionBadge: View {
         ZStack {
             if isOn {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(Color(hex: "#3B82F6") ?? Color.accentColor)
                     .overlay(
                         Image(systemName: "checkmark")
-                            .font(.caption2.bold())
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
                     )
             } else {
                 Circle()
-                    .strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
+                    .strokeBorder(Color.white.opacity(0.4), lineWidth: 1.5)
             }
         }
         .frame(width: 22, height: 22)
-        .background(Circle().fill(Color(.systemBackground).opacity(0.85)))
+        .background(Circle().fill(Color(hex: "#111827")?.opacity(0.9) ?? Color(.systemBackground)))
     }
 }
 
-// MARK: - Cellule de grille (carte moderne)
+// MARK: - Cellule de grille (Carte Orvian `FileCard`)
 
 struct FileGridCell: View {
     let item: FileItem
@@ -175,62 +208,47 @@ struct FileGridCell: View {
     @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 6) {
+            // Zone d'aperçu / icône 4:3
             ZStack {
                 if item.isMedia {
                     RemoteThumbnail(file: item, width: 400, height: 400, corner: 10)
                 } else {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(.systemGray6).opacity(0.8))
-                        .overlay(FileIcon(item: item, size: 36))
+                        .fill(Color(hex: "#1B2435") ?? Color(.systemGray6))
+                        .overlay(
+                            FileIcon(item: item, size: item.isDirectory ? 40 : 34)
+                        )
                 }
 
+                // Overlay vidéo Orvian (en bas à droite)
                 if item.isVideo {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 26))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
-                }
-            }
-            .aspectRatio(1, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(alignment: .bottomTrailing) {
-                if item.isVideo, let duration = videoStore.formattedDuration(for: item.id) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 7, weight: .bold))
-                        Text(duration)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.black.opacity(0.65)))
-                    .padding(5)
-                }
-            }
-            .overlay(alignment: .bottomLeading) {
-                if !item.tagIDs.isEmpty {
-                    HStack(spacing: 3) {
-                        ForEach(item.tagIDs.prefix(3), id: \.self) { tagID in
-                            Circle()
-                                .fill(categoryStore.color(forCategoryID: tagID))
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            ZStack {
+                                Circle()
+                                    .fill(Color.black.opacity(0.65))
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "video.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                            .padding(5)
                         }
                     }
-                    .padding(5)
                 }
             }
+            .aspectRatio(4/3, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(alignment: .topTrailing) {
                 if item.isFavorite == true {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color(hex: "FFC107") ?? .yellow)
-                        .padding(4)
-                        .background(Circle().fill(Color.black.opacity(0.45)))
-                        .shadow(radius: 2)
-                        .padding(5)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(hex: "#FBBF24") ?? .yellow)
+                        .shadow(color: .black.opacity(0.8), radius: 3, x: 0, y: 1)
+                        .padding(6)
                 }
             }
             .task {
@@ -239,31 +257,53 @@ struct FileGridCell: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            // Détails du fichier (centrés comme dans Orvian)
+            VStack(spacing: 2) {
                 Text(item.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .multilineTextAlignment(.center)
 
-                Text(item.subtitle)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if let meta = item.orvianMeta {
+                    Text(meta)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
+                        .lineLimit(1)
+                }
+
+                // Badges de Tags Orvian
+                if !item.tagIDs.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(item.tagIDs.prefix(2), id: \.self) { tagID in
+                            let cat = categoryStore.category(withID: tagID)
+                            let col = categoryStore.color(forCategoryID: tagID)
+                            Text(cat?.name ?? "Tag")
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundStyle(col)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(col.opacity(0.16))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().strokeBorder(col.opacity(0.38), lineWidth: 0.5))
+                        }
+                    }
+                    .padding(.top, 1)
+                }
             }
-            .padding(.horizontal, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
-        .padding(7)
+        .padding(9)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(Color(hex: "#111827")?.opacity(0.8) ?? Color(.secondarySystemGroupedBackground))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(.separator).opacity(0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 3)
     }
 }
 

@@ -41,7 +41,7 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             SettingsView()
                 .tabItem {
-                    Label("Réglages", systemImage: selectedTab == .settings ? "gearshape.fill" : "gearshape")
+                    Label("Réglages", systemImage: "slider.horizontal.3")
                 }
                 .tag(MainTab.settings)
 
@@ -69,7 +69,7 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.profile)
         }
-        .tint(.accentColor)
+        .tint(Color(hex: "#3B82F6") ?? .accentColor)
         .onAppear {
             selectedTab = .home
         }

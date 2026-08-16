@@ -2,21 +2,23 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-// MARK: - Filtre rapide par type de fichier
+// MARK: - Filtre rapide par type de fichier (Orvian TypeFilter)
 
 enum FileTypeFilter: String, CaseIterable, Identifiable {
     case all = "Tous"
     case folders = "Dossiers"
-    case media = "Médias"
+    case images = "Images"
+    case videos = "Vidéos"
     case documents = "Documents"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .all: return "square.grid.2x2.fill"
+        case .all: return "square.stack.3d.up.fill"
         case .folders: return "folder.fill"
-        case .media: return "photo.fill"
+        case .images: return "photo.fill"
+        case .videos: return "film.fill"
         case .documents: return "doc.text.fill"
         }
     }
@@ -93,7 +95,8 @@ struct FileListView: View {
         let items = model.items
         counts[.all] = items.count
         counts[.folders] = items.filter { $0.isDirectory }.count
-        counts[.media] = items.filter { $0.isMedia }.count
+        counts[.images] = items.filter { $0.isImage }.count
+        counts[.videos] = items.filter { $0.isVideo }.count
         counts[.documents] = items.filter { !$0.isMedia && !$0.isDirectory }.count
         return counts
     }
@@ -106,8 +109,10 @@ struct FileListView: View {
             break
         case .folders:
             items = items.filter { $0.isDirectory }
-        case .media:
-            items = items.filter { $0.isMedia }
+        case .images:
+            items = items.filter { $0.isImage }
+        case .videos:
+            items = items.filter { $0.isVideo }
         case .documents:
             items = items.filter { !$0.isMedia && !$0.isDirectory }
         }
@@ -326,7 +331,7 @@ struct FileListView: View {
         VStack(spacing: 0) {
             if !selection.isActive && !model.items.isEmpty {
                 QuickTypeFilterBar(selectedFilter: $selectedTypeFilter, counts: filterCounts)
-                    .background(Color(.systemGroupedBackground))
+                    .background(Color(hex: "#080C14") ?? Color(.systemBackground))
             }
 
             if gridView {
@@ -338,11 +343,11 @@ struct FileListView: View {
                         }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.top, 4)
-                    .padding(.bottom, 14)
+                    .padding(.top, 6)
+                    .padding(.bottom, 16)
                     footer
                 }
-                .background(Color(.systemGroupedBackground))
+                .background(Color(hex: "#080C14") ?? Color(.systemBackground))
             } else {
                 List {
                     Section {
@@ -353,13 +358,24 @@ struct FileListView: View {
 
                     ForEach(displayedItems) { item in
                         row(item)
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(hex: "#111827")?.opacity(0.7) ?? Color(.secondarySystemGroupedBackground))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .padding(.vertical, 2)
+                            )
                     }
                     footer
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(Color(hex: "#080C14") ?? Color(.systemBackground))
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color(hex: "#080C14") ?? Color(.systemBackground))
     }
 
 
@@ -825,29 +841,29 @@ private struct QuickTypeFilterBar: View {
                                     .padding(.vertical, 1.5)
                                     .background(
                                         Capsule()
-                                            .fill(isSelected ? Color.white.opacity(0.25) : Color(.systemGray5))
+                                            .fill(isSelected ? Color.white.opacity(0.25) : Color.white.opacity(0.1))
                                     )
                             }
                         }
                         .padding(.horizontal, 13)
                         .padding(.vertical, 7)
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .foregroundStyle(isSelected ? Color.white : (Color(hex: "#B2BDCF") ?? Color.secondary))
                         .background(
                             Capsule()
-                                .fill(isSelected ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                                .fill(isSelected ? (Color(hex: "#3B82F6") ?? Color.accentColor) : (Color(hex: "#1B2435") ?? Color(.secondarySystemGroupedBackground)))
                         )
                         .overlay(
                             Capsule()
-                                .strokeBorder(isSelected ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
+                                .strokeBorder(isSelected ? (Color(hex: "#60A5FA")?.opacity(0.5) ?? Color.clear) : Color.white.opacity(0.08), lineWidth: 1)
                         )
-                        .shadow(color: isSelected ? Color.accentColor.opacity(0.25) : Color.black.opacity(0.02),
-                                radius: isSelected ? 4 : 1, x: 0, y: 1)
+                        .shadow(color: isSelected ? (Color(hex: "#3B82F6")?.opacity(0.4) ?? .clear) : Color.black.opacity(0.25),
+                                radius: isSelected ? 6 : 2, x: 0, y: 1)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
         }
     }
 }
