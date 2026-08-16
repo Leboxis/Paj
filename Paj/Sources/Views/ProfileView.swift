@@ -148,16 +148,13 @@ struct ProfileThumb: View {
             if item.isMedia {
                 RemoteThumbnail(file: item, width: 200, height: 200, corner: 8)
             } else {
-                FileIcon(item: item, size: item.isDirectory ? 32 : 26)
+                FileIcon(item: item, size: 28)
             }
             if item.isVideo {
-                Image(systemName: "video.fill")
-                    .font(.system(size: 8, weight: .bold))
+                Image(systemName: "play.circle.fill")
+                    .font(.caption)
                     .foregroundStyle(.white)
-                    .padding(3)
-                    .background(Circle().fill(Color.black.opacity(0.65)))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(2)
+                    .shadow(radius: 2)
             }
         }
         .frame(width: 64, height: 64)
@@ -169,7 +166,7 @@ struct PagedFilesView: View {
     let title: String
     var loader: (String?) async throws -> Page<FileItem>
 
-    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 2
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
 
     @State private var items: [FileItem] = []
     @State private var cursor: String?

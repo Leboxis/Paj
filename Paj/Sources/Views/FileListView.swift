@@ -2,23 +2,21 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-// MARK: - Filtre rapide par type de fichier (Orvian TypeFilter)
+// MARK: - Filtre rapide par type de fichier
 
 enum FileTypeFilter: String, CaseIterable, Identifiable {
     case all = "Tous"
     case folders = "Dossiers"
-    case images = "Images"
-    case videos = "Vidéos"
+    case media = "Médias"
     case documents = "Documents"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .all: return "square.stack.3d.up.fill"
+        case .all: return "square.grid.2x2.fill"
         case .folders: return "folder.fill"
-        case .images: return "photo.fill"
-        case .videos: return "film.fill"
+        case .media: return "photo.fill"
         case .documents: return "doc.text.fill"
         }
     }
@@ -38,7 +36,7 @@ struct FileListView: View {
     @AppStorage private var gridView: Bool
     @AppStorage private var sortField: String
     @AppStorage private var sortAscending: Bool
-    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 2
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
 
     @StateObject private var selection = SelectionState()
     @ObservedObject private var videoStore = VideoMetadataStore.shared
@@ -95,8 +93,7 @@ struct FileListView: View {
         let items = model.items
         counts[.all] = items.count
         counts[.folders] = items.filter { $0.isDirectory }.count
-        counts[.images] = items.filter { $0.isImage }.count
-        counts[.videos] = items.filter { $0.isVideo }.count
+        counts[.media] = items.filter { $0.isMedia }.count
         counts[.documents] = items.filter { !$0.isMedia && !$0.isDirectory }.count
         return counts
     }
@@ -109,10 +106,8 @@ struct FileListView: View {
             break
         case .folders:
             items = items.filter { $0.isDirectory }
-        case .images:
-            items = items.filter { $0.isImage }
-        case .videos:
-            items = items.filter { $0.isVideo }
+        case .media:
+            items = items.filter { $0.isMedia }
         case .documents:
             items = items.filter { !$0.isMedia && !$0.isDirectory }
         }
@@ -323,7 +318,7 @@ struct FileListView: View {
     // MARK: - Contenu
 
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: max(1, cardGridColumns))
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, cardGridColumns))
     }
 
     @ViewBuilder
@@ -331,7 +326,7 @@ struct FileListView: View {
         VStack(spacing: 0) {
             if !selection.isActive && !model.items.isEmpty {
                 QuickTypeFilterBar(selectedFilter: $selectedTypeFilter, counts: filterCounts)
-                    .background(Color(hex: "#080C14") ?? Color(.systemBackground))
+                    .background(Color(.systemGroupedBackground))
             }
 
             if gridView {
@@ -343,11 +338,11 @@ struct FileListView: View {
                         }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.top, 6)
-                    .padding(.bottom, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 14)
                     footer
                 }
-                .background(Color(hex: "#080C14") ?? Color(.systemBackground))
+                .background(Color(.systemGroupedBackground))
             } else {
                 List {
                     Section {
@@ -358,24 +353,13 @@ struct FileListView: View {
 
                     ForEach(displayedItems) { item in
                         row(item)
-                            .listRowBackground(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color(hex: "#111827")?.opacity(0.7) ?? Color(.secondarySystemGroupedBackground))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                                    )
-                                    .padding(.vertical, 2)
-                            )
                     }
                     footer
                 }
                 .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .background(Color(hex: "#080C14") ?? Color(.systemBackground))
             }
         }
-        .background(Color(hex: "#080C14") ?? Color(.systemBackground))
+        .background(Color(.systemGroupedBackground))
     }
 
 
@@ -823,89 +807,48 @@ private struct QuickTypeFilterBar: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(FileTypeFilter.allCases) { filter in
-                    FilterPillButton(
-                        filter: filter,
-                        isSelected: selectedFilter == filter,
-                        count: counts?[filter] ?? 0
-                    ) {
+                    let isSelected = selectedFilter == filter
+                    Button {
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                             selectedFilter = filter
                         }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: filter.icon)
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                            Text(filter.rawValue)
+                                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                            if let counts, let count = counts[filter], count > 0 {
+                                Text("\(count)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1.5)
+                                    .background(
+                                        Capsule()
+                                            .fill(isSelected ? Color.white.opacity(0.25) : Color(.systemGray5))
+                                    )
+                            }
+                        }
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 7)
+                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .background(
+                            Capsule()
+                                .fill(isSelected ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(isSelected ? Color.clear : Color(.separator).opacity(0.35), lineWidth: 0.5)
+                        )
+                        .shadow(color: isSelected ? Color.accentColor.opacity(0.25) : Color.black.opacity(0.02),
+                                radius: isSelected ? 4 : 1, x: 0, y: 1)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-        }
-    }
-}
-
-private struct FilterPillButton: View {
-    let filter: FileTypeFilter
-    let isSelected: Bool
-    let count: Int
-    let action: () -> Void
-
-    private var textColor: Color {
-        isSelected ? Color.white : (Color(hex: "#B2BDCF") ?? Color.secondary)
-    }
-
-    private var bgColor: Color {
-        if isSelected {
-            return Color(hex: "#3B82F6") ?? Color.accentColor
-        } else {
-            return Color(hex: "#1B2435") ?? Color(.secondarySystemGroupedBackground)
-        }
-    }
-
-    private var borderColor: Color {
-        if isSelected {
-            return Color(hex: "#60A5FA")?.opacity(0.5) ?? Color.clear
-        } else {
-            return Color.white.opacity(0.08)
-        }
-    }
-
-    private var shadowColor: Color {
-        if isSelected {
-            return Color(hex: "#3B82F6")?.opacity(0.4) ?? Color.clear
-        } else {
-            return Color.black.opacity(0.25)
-        }
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: filter.icon)
-                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-
-                Text(filter.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? Color.white.opacity(0.25) : Color.white.opacity(0.1))
-                        )
-                }
-            }
-            .padding(.horizontal, 13)
             .padding(.vertical, 7)
-            .foregroundStyle(textColor)
-            .background(
-                Capsule().fill(bgColor)
-            )
-            .overlay(
-                Capsule().strokeBorder(borderColor, lineWidth: 1)
-            )
-            .shadow(color: shadowColor, radius: isSelected ? 6 : 2, x: 0, y: 1)
         }
-        .buttonStyle(.plain)
     }
 }
 

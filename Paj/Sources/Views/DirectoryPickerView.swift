@@ -100,7 +100,7 @@ private struct PickerDirectoryList: View {
                         HStack(spacing: 12) {
                             Image(systemName: "folder.fill")
                                 .font(.title3)
-                                .foregroundStyle(Color(hex: item.color) ?? Color(hex: "#0098FF")!)
+                                .foregroundStyle(Color(hex: item.color) ?? (Color(hex: "#FBBF24") ?? .yellow))
                             Text(item.name)
                                 .font(.body)
                                 .foregroundStyle(isExcluded ? .secondary : .primary)

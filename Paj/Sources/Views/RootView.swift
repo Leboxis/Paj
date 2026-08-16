@@ -37,30 +37,6 @@ struct RootView: View {
 struct MainTabView: View {
     @Binding var selectedTab: MainTab
 
-    init(selectedTab: Binding<MainTab>) {
-        self._selectedTab = selectedTab
-
-        let appearance = UITabBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(Color(hex: "#0E1422") ?? .black)
-
-        let itemAppearance = UITabBarItemAppearance()
-        let inactiveColor = UIColor(Color(hex: "#7F8AA0") ?? Color.gray)
-        let activeColor = UIColor(Color(hex: "#3B82F6") ?? Color.blue)
-
-        itemAppearance.normal.iconColor = inactiveColor
-        itemAppearance.normal.titleTextAttributes = [.foregroundColor: inactiveColor]
-        itemAppearance.selected.iconColor = activeColor
-        itemAppearance.selected.titleTextAttributes = [.foregroundColor: activeColor]
-
-        appearance.stackedLayoutAppearance = itemAppearance
-        appearance.inlineLayoutAppearance = itemAppearance
-        appearance.compactInlineLayoutAppearance = itemAppearance
-
-        UITabBar.appearance().standardAppearance = appearance
-        UITabBar.appearance().scrollEdgeAppearance = appearance
-    }
-
     var body: some View {
         TabView(selection: $selectedTab) {
             SettingsView()
@@ -71,7 +47,7 @@ struct MainTabView: View {
 
             TagsView()
                 .tabItem {
-                    Label("Tags", systemImage: selectedTab == .tags ? "tag.fill" : "tag")
+                    Label("Tags", systemImage: selectedTab == .tags ? "tag.2.fill" : "tag.2")
                 }
                 .tag(MainTab.tags)
 
@@ -93,7 +69,7 @@ struct MainTabView: View {
                 }
                 .tag(MainTab.profile)
         }
-        .tint(Color(hex: "#3B82F6") ?? .accentColor)
+        .tint(.accentColor)
         .onAppear {
             selectedTab = .home
         }
