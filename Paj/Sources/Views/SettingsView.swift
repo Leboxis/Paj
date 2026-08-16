@@ -5,9 +5,6 @@ struct SettingsView: View {
 
     @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
 
-    @State private var driveName: String?
-    @State private var usedSize: Int64?
-    @State private var totalSize: Int64?
     @State private var cacheSize = "—"
     @State private var showEditConfig = false
     @State private var showReset = false
@@ -15,17 +12,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                if let driveName {
-                    Section("Drive") {
-                        LabeledContent("Nom", value: driveName)
-                        if let used = usedSize, let total = totalSize {
-                            LabeledContent("Occupation") {
-                                Text("\(ByteCountFormatter.string(fromByteCount: used, countStyle: .file)) sur \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))")
-                            }
-                        }
-                    }
-                }
-
                 Section {
                     Picker("Nombre de colonnes", selection: $cardGridColumns) {
                         Text("2").tag(2)
@@ -38,8 +24,6 @@ struct SettingsView: View {
                 } footer: {
                     Text("Définit le nombre de colonnes dans la vue grille (3 colonnes par défaut).")
                 }
-
-
 
                 Section {
                     Button {
@@ -81,7 +65,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Réglages")
-            .task { await loadDriveInfo() }
             .onAppear { cacheSize = ThumbnailStore.shared.formattedSize() }
             .sheet(isPresented: $showEditConfig) {
                 SetupView(existing: true)
@@ -99,13 +82,5 @@ struct SettingsView: View {
 
     private var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-    }
-
-    private func loadDriveInfo() async {
-        if let info = try? await KDriveClient.shared.driveInfo() {
-            driveName = info.name
-            usedSize = Int64(info.usedSize)
-            totalSize = Int64(info.size)
-        }
     }
 }

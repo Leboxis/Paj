@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import AVFoundation
 import UIKit
 
 /// Visionneuse plein écran : barre supérieure placée au-dessus du média,
@@ -274,9 +275,16 @@ private struct VideoPage: View {
         .task(id: item.id) {
             guard player == nil else { return }
             do {
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(.playback, mode: .moviePlayback, options: [])
+                try? session.setActive(true)
+
                 let url = try await KDriveClient.shared.temporaryUrl(for: item)
                 guard !Task.isCancelled else { return }
                 let newPlayer = AVPlayer(url: url)
+                newPlayer.isMuted = false
+                newPlayer.volume = 1.0
+                newPlayer.automaticallyWaitsToMinimizeStalling = true
                 player = newPlayer
                 newPlayer.play()
             } catch {
@@ -293,8 +301,15 @@ private struct PlayerContainer: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.videoGravity = .resizeAspect
+        controller.showsPlaybackControls = true
+        controller.allowsPictureInPicturePlayback = true
+        controller.updatesNowPlayingInfoCenter = false
         return controller
     }
 
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {}
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player {
+            controller.player = player
+        }
+    }
 }

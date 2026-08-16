@@ -7,6 +7,7 @@ struct TagsView: View {
     @State private var searchText = ""
     @State private var loading = true
     @State private var errorText: String?
+    @State private var showCreateTag = false
 
     private var filteredCategories: [KCategory] {
         let trimmed = searchText.trimmingCharacters(in: .whitespaces)
@@ -48,7 +49,7 @@ struct TagsView: View {
                     ContentUnavailableView(
                         "Aucun tag",
                         systemImage: "tag",
-                        description: Text("Créez des tags via le menu contextuel d'un fichier (Appui long → Tags).")
+                        description: Text("Créez des tags avec le bouton + ci-dessus ou via le menu d'un fichier.")
                     )
                     .padding(.top, 40)
                 } else if filteredCategories.isEmpty {
@@ -71,6 +72,22 @@ struct TagsView: View {
             .background(Color(.systemGroupedBackground))
             .searchable(text: $searchText, prompt: "Filtrer les tags…")
             .navigationTitle("Tags")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showCreateTag = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    .accessibilityLabel("Ajouter un tag")
+                }
+            }
+            .sheet(isPresented: $showCreateTag) {
+                CreateTagSheet {
+                    await load(force: true)
+                }
+            }
             .refreshable { await load(force: true) }
             .task { await load() }
         }
@@ -86,6 +103,145 @@ struct TagsView: View {
             errorText = error.localizedDescription
         }
         loading = false
+    }
+}
+
+/// Feuille de création d'un nouveau tag (catégorie kdrive) avec nom et ColorPicker synchronisé avec l'API.
+struct CreateTagSheet: View {
+    var onCreated: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String = ""
+    @State private var selectedColor: Color = Color(hex: "#FF9500") ?? .orange
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private let presetPalette = [
+        "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#00C7BE",
+        "#007AFF", "#5856D6", "#AF52DE", "#FF2D55", "#8E8E93"
+    ]
+
+    private var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Aperçu") {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(selectedColor)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+                        }
+
+                        Text(name.trimmingCharacters(in: .whitespaces).isEmpty ? "Nom du tag" : name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(name.trimmingCharacters(in: .whitespaces).isEmpty ? .secondary : .primary)
+                            .lineLimit(1)
+
+                        Spacer()
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("Nom") {
+                    TextField("Ex: Factures, Projet, Urgent…", text: $name)
+                        .textInputAutocapitalization(.words)
+                }
+
+                Section("Couleur") {
+                    ColorPicker("Couleur du tag", selection: $selectedColor, supportsOpacity: false)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Couleurs suggérées")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 10) {
+                            ForEach(presetPalette, id: \.self) { hex in
+                                Button {
+                                    if let col = Color(hex: hex) {
+                                        selectedColor = col
+                                    }
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color(hex: hex) ?? .gray)
+                                            .frame(width: 28, height: 28)
+                                        if selectedColor.hexString.uppercased() == hex.uppercased() {
+                                            Circle()
+                                                .strokeBorder(Color.primary, lineWidth: 2)
+                                                .frame(width: 34, height: 34)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                            .font(.footnote)
+                    }
+                }
+            }
+            .navigationTitle("Nouveau tag")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Annuler") {
+                        dismiss()
+                    }
+                    .disabled(isSubmitting)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        submit()
+                    } label: {
+                        if isSubmitting {
+                            ProgressView()
+                        } else {
+                            Text("Ajouter")
+                                .bold()
+                        }
+                    }
+                    .disabled(!isValid || isSubmitting)
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty else { return }
+        isSubmitting = true
+        errorMessage = nil
+
+        let hex = selectedColor.hexString
+
+        Task { @MainActor in
+            do {
+                _ = try await KDriveClient.shared.createCategory(name: trimmedName, color: hex)
+                await CategoryStore.shared.loadIfNeeded(force: true)
+                await onCreated()
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                isSubmitting = false
+            }
+        }
     }
 }
 
