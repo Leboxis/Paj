@@ -823,48 +823,89 @@ private struct QuickTypeFilterBar: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(FileTypeFilter.allCases) { filter in
-                    let isSelected = selectedFilter == filter
-                    Button {
+                    FilterPillButton(
+                        filter: filter,
+                        isSelected: selectedFilter == filter,
+                        count: counts?[filter] ?? 0
+                    ) {
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                             selectedFilter = filter
                         }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: filter.icon)
-                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                            Text(filter.rawValue)
-                                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                            if let counts, let count = counts[filter], count > 0 {
-                                Text("\(count)")
-                                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1.5)
-                                    .background(
-                                        Capsule()
-                                            .fill(isSelected ? Color.white.opacity(0.25) : Color.white.opacity(0.1))
-                                    )
-                            }
-                        }
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 7)
-                        .foregroundStyle(isSelected ? Color.white : (Color(hex: "#B2BDCF") ?? Color.secondary))
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? (Color(hex: "#3B82F6") ?? Color.accentColor) : (Color(hex: "#1B2435") ?? Color(.secondarySystemGroupedBackground)))
-                        )
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(isSelected ? (Color(hex: "#60A5FA")?.opacity(0.5) ?? Color.clear) : Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                        .shadow(color: isSelected ? (Color(hex: "#3B82F6")?.opacity(0.4) ?? .clear) : Color.black.opacity(0.25),
-                                radius: isSelected ? 6 : 2, x: 0, y: 1)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
         }
+    }
+}
+
+private struct FilterPillButton: View {
+    let filter: FileTypeFilter
+    let isSelected: Bool
+    let count: Int
+    let action: () -> Void
+
+    private var textColor: Color {
+        isSelected ? Color.white : (Color(hex: "#B2BDCF") ?? Color.secondary)
+    }
+
+    private var bgColor: Color {
+        if isSelected {
+            return Color(hex: "#3B82F6") ?? Color.accentColor
+        } else {
+            return Color(hex: "#1B2435") ?? Color(.secondarySystemGroupedBackground)
+        }
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return Color(hex: "#60A5FA")?.opacity(0.5) ?? Color.clear
+        } else {
+            return Color.white.opacity(0.08)
+        }
+    }
+
+    private var shadowColor: Color {
+        if isSelected {
+            return Color(hex: "#3B82F6")?.opacity(0.4) ?? Color.clear
+        } else {
+            return Color.black.opacity(0.25)
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: filter.icon)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+
+                Text(filter.rawValue)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(
+                            Capsule()
+                                .fill(isSelected ? Color.white.opacity(0.25) : Color.white.opacity(0.1))
+                        )
+                }
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .foregroundStyle(textColor)
+            .background(
+                Capsule().fill(bgColor)
+            )
+            .overlay(
+                Capsule().strokeBorder(borderColor, lineWidth: 1)
+            )
+            .shadow(color: shadowColor, radius: isSelected ? 6 : 2, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
     }
 }
 
