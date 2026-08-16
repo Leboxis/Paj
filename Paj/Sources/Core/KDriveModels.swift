@@ -34,8 +34,20 @@ struct FileItem: Identifiable, Hashable, Codable {
         Set(tagIDs)
     }
 
-    var isImage: Bool { mimeType?.hasPrefix("image/") ?? false }
-    var isVideo: Bool { mimeType?.hasPrefix("video/") ?? false }
+    var isImage: Bool {
+        if let m = mimeType, m.hasPrefix("image/") { return true }
+        if extensionType == "image" { return true }
+        let ext = (name as NSString).pathExtension.lowercased()
+        return ["jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tiff", "bmp", "svg"].contains(ext)
+    }
+
+    var isVideo: Bool {
+        if let m = mimeType, m.hasPrefix("video/") { return true }
+        if extensionType == "video" { return true }
+        let ext = (name as NSString).pathExtension.lowercased()
+        return ["mp4", "mov", "m4v", "mkv", "webm", "avi", "3gp", "ts", "flv"].contains(ext)
+    }
+
     var isMedia: Bool { isImage || isVideo }
 
     /// Fichiers texte éditables (.txt, .md, .log ou mime text/*).
@@ -98,10 +110,14 @@ struct Page<T: Decodable>: Decodable {
 }
 
 struct TemporaryUrlData: Decodable {
-    let temporaryUrl: String
+    let temporaryUrl: String?
+    let url: String?
+
+    var validUrlString: String? { temporaryUrl ?? url }
 
     enum CodingKeys: String, CodingKey {
         case temporaryUrl = "temporary_url"
+        case url
     }
 }
 

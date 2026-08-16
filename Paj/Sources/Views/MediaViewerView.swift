@@ -281,9 +281,12 @@ private struct VideoPage: View {
         .task(id: item.id) {
             guard player == nil else { return }
             do {
+                try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+                try? AVAudioSession.sharedInstance().setActive(true)
                 let url = try await KDriveClient.shared.temporaryUrl(for: item)
                 guard !Task.isCancelled else { return }
                 let newPlayer = AVPlayer(url: url)
+                newPlayer.automaticallyWaitsToMinimizeStalling = true
                 player = newPlayer
                 newPlayer.play()
             } catch {
@@ -300,8 +303,13 @@ private struct PlayerContainer: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.videoGravity = .resizeAspect
+        controller.showsPlaybackControls = true
         return controller
     }
 
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {}
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player {
+            controller.player = player
+        }
+    }
 }

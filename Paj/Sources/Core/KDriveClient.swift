@@ -362,7 +362,7 @@ final class KDriveClient {
         let resp: Resp = try await get("2/drive/\(AppConfig.driveId)/files/\(item.id)/temporary_url", query: [
             URLQueryItem(name: "duration", value: "3600")
         ])
-        guard let s = resp.data?.temporaryUrl, let url = URL(string: s) else { throw KDriveError.decoding }
+        guard let s = resp.data?.validUrlString, let url = URL(string: s) else { throw KDriveError.decoding }
         return url
     }
 
