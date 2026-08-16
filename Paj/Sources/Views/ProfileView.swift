@@ -169,7 +169,7 @@ struct PagedFilesView: View {
     let title: String
     var loader: (String?) async throws -> Page<FileItem>
 
-    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 2
 
     @State private var items: [FileItem] = []
     @State private var cursor: String?

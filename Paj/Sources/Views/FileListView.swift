@@ -38,7 +38,7 @@ struct FileListView: View {
     @AppStorage private var gridView: Bool
     @AppStorage private var sortField: String
     @AppStorage private var sortAscending: Bool
-    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 3
+    @AppStorage("cardGridColumns") private var cardGridColumns: Int = 2
 
     @StateObject private var selection = SelectionState()
     @ObservedObject private var videoStore = VideoMetadataStore.shared
@@ -323,7 +323,7 @@ struct FileListView: View {
     // MARK: - Contenu
 
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, cardGridColumns))
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: max(1, cardGridColumns))
     }
 
     @ViewBuilder

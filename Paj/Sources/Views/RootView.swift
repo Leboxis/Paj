@@ -37,6 +37,30 @@ struct RootView: View {
 struct MainTabView: View {
     @Binding var selectedTab: MainTab
 
+    init(selectedTab: Binding<MainTab>) {
+        self._selectedTab = selectedTab
+
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(Color(hex: "#0E1422") ?? .black)
+
+        let itemAppearance = UITabBarItemAppearance()
+        let inactiveColor = UIColor(Color(hex: "#7F8AA0") ?? .gray)
+        let activeColor = UIColor(Color(hex: "#3B82F6") ?? .systemBlue)
+
+        itemAppearance.normal.iconColor = inactiveColor
+        itemAppearance.normal.titleTextAttributes = [.foregroundColor: inactiveColor]
+        itemAppearance.selected.iconColor = activeColor
+        itemAppearance.selected.titleTextAttributes = [.foregroundColor: activeColor]
+
+        appearance.stackedLayoutAppearance = itemAppearance
+        appearance.inlineLayoutAppearance = itemAppearance
+        appearance.compactInlineLayoutAppearance = itemAppearance
+
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             SettingsView()

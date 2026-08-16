@@ -211,17 +211,17 @@ struct FileGridCell: View {
     @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     var body: some View {
-        VStack(spacing: 6) {
-            // Zone d'aperçu / icône sans fond pour les dossiers/fichiers texte, et grande miniature 1:1 pour les médias
+        VStack(spacing: 8) {
+            // Zone d'aperçu / icône sans AUCUN fond pour les dossiers/fichiers texte, et grande miniature pour les médias
             ZStack {
                 if item.isMedia {
-                    RemoteThumbnail(file: item, width: 500, height: 500, corner: 12)
-                        .aspectRatio(1, contentMode: .fit)
+                    RemoteThumbnail(file: item, width: 600, height: 600, corner: 12)
+                        .aspectRatio(4/3, contentMode: .fill)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else {
-                    FileIcon(item: item, size: item.isDirectory ? 64 : 54)
+                    FileIcon(item: item, size: item.isDirectory ? 72 : 62)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .aspectRatio(1, contentMode: .fit)
+                        .aspectRatio(4/3, contentMode: .fit)
                 }
 
                 // Overlay vidéo Orvian (en bas à droite)
@@ -243,7 +243,8 @@ struct FileGridCell: View {
                     }
                 }
             }
-            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(4/3, contentMode: .fit)
             .overlay(alignment: .topTrailing) {
                 if item.isFavorite == true {
                     Image(systemName: "star.fill")
@@ -262,7 +263,7 @@ struct FileGridCell: View {
             // Détails du fichier (centrés comme dans Orvian)
             VStack(spacing: 2) {
                 Text(item.name)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -270,7 +271,7 @@ struct FileGridCell: View {
 
                 if let meta = item.orvianMeta {
                     Text(meta)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                         .foregroundStyle(Color(hex: "#7F8AA0") ?? .secondary)
                         .lineLimit(1)
                 }
@@ -282,10 +283,10 @@ struct FileGridCell: View {
                             let cat = categoryStore.category(withID: tagID)
                             let col = categoryStore.color(forCategoryID: tagID)
                             Text(cat?.name ?? "Tag")
-                                .font(.system(size: 8.5, weight: .semibold))
+                                .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(col)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
                                 .background(col.opacity(0.16))
                                 .clipShape(Capsule())
                                 .overlay(Capsule().strokeBorder(col.opacity(0.38), lineWidth: 0.5))
@@ -296,7 +297,7 @@ struct FileGridCell: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .padding(10)
+        .padding(11)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(hex: "#111827")?.opacity(0.8) ?? Color(.secondarySystemGroupedBackground))
