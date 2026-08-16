@@ -45,8 +45,8 @@ struct MainTabView: View {
         appearance.backgroundColor = UIColor(Color(hex: "#0E1422") ?? .black)
 
         let itemAppearance = UITabBarItemAppearance()
-        let inactiveColor = UIColor(Color(hex: "#7F8AA0") ?? .gray)
-        let activeColor = UIColor(Color(hex: "#3B82F6") ?? .systemBlue)
+        let inactiveColor = UIColor(Color(hex: "#7F8AA0") ?? Color.gray)
+        let activeColor = UIColor(Color(hex: "#3B82F6") ?? Color.blue)
 
         itemAppearance.normal.iconColor = inactiveColor
         itemAppearance.normal.titleTextAttributes = [.foregroundColor: inactiveColor]
