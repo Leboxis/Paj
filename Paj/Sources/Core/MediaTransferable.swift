@@ -46,44 +46,43 @@ enum MediaLoader {
         return df
     }()
 
-    static func loadMedia(from item: PhotosPickerItem) async throws -> (name: String, data: Data)? {
+    /// Charge un média de la photothèque vers un fichier temporaire en
+    /// sandbox. Retourne (nom d'upload, URL du fichier) — le fichier reste
+    /// sur disque (jamais chargé entièrement en mémoire) et doit être
+    /// supprimé par l'appelant après l'upload.
+    static func loadMedia(from item: PhotosPickerItem) async throws -> (name: String, url: URL)? {
         let isMovie = item.supportedContentTypes.contains { $0.conforms(to: .movie) || $0.conforms(to: .video) }
 
         // 1. Essai vidéo si le type est détecté comme vidéo/film
+        //    (FileRepresentation copie déjà le média dans tmp/ en sandbox)
         if isMovie {
             if let movie = try? await item.loadTransferable(type: MovieFileTransferable.self) {
-                let data = try Data(contentsOf: movie.url)
                 let ext = movie.url.pathExtension.isEmpty ? "mp4" : movie.url.pathExtension
-                let name = "VID_\(timestampFormatter.string(from: Date())).\(ext)"
-                try? FileManager.default.removeItem(at: movie.url)
-                return (name, data)
+                return ("VID_\(timestampFormatter.string(from: Date())).\(ext)", movie.url)
             }
         }
 
         // 2. Essai représentation fichier image (PNG, HEIC, JPEG d'origine)
         if let imageFile = try? await item.loadTransferable(type: ImageFileTransferable.self) {
-            let data = try Data(contentsOf: imageFile.url)
             let ext = imageFile.url.pathExtension.isEmpty ? "jpg" : imageFile.url.pathExtension
-            let name = "IMG_\(timestampFormatter.string(from: Date())).\(ext)"
-            try? FileManager.default.removeItem(at: imageFile.url)
-            return (name, data)
+            return ("IMG_\(timestampFormatter.string(from: Date())).\(ext)", imageFile.url)
         }
 
-        // 3. Essai données brutes directes
+        // 3. Essai données brutes directes (rare, petits fichiers) :
+        //    écrites en fichier temporaire pour un upload streamé.
         if let data = try? await item.loadTransferable(type: Data.self) {
             let ext = isMovie ? "mp4" : "jpg"
             let prefix = isMovie ? "VID" : "IMG"
-            let name = "\(prefix)_\(timestampFormatter.string(from: Date())).\(ext)"
-            return (name, data)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString + "." + ext)
+            try data.write(to: url, options: .atomic)
+            return ("\(prefix)_\(timestampFormatter.string(from: Date())).\(ext)", url)
         }
 
         // 4. Dernier essai vidéo si la détection initiale n'avait pas identifié le type
         if let movie = try? await item.loadTransferable(type: MovieFileTransferable.self) {
-            let data = try Data(contentsOf: movie.url)
             let ext = movie.url.pathExtension.isEmpty ? "mp4" : movie.url.pathExtension
-            let name = "VID_\(timestampFormatter.string(from: Date())).\(ext)"
-            try? FileManager.default.removeItem(at: movie.url)
-            return (name, data)
+            return ("VID_\(timestampFormatter.string(from: Date())).\(ext)", movie.url)
         }
 
         return nil
@@ -93,16 +92,28 @@ enum MediaLoader {
 // MARK: - Téléchargement de fichiers pour partage natif
 
 enum FileDownloadHelper {
-    /// Télécharge les données d'un fichier kdrive et l'enregistre localement
+    /// Télécharge un fichier kdrive et l'enregistre localement
     /// avec son vrai nom pour la feuille de partage iOS (Enregistrer dans Fichiers, AirDrop, etc.).
+    /// Téléchargement streamé sur disque : aucun fichier entier en mémoire.
     static func downloadAndPrepareLocalURL(item: FileItem) async throws -> URL {
-        let data = try await KDriveClient.shared.downloadData(fileId: item.id)
+        let tempURL = try await KDriveClient.shared.downloadFileToTemporary(fileId: item.id)
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Downloads", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let fileURL = tempDir.appendingPathComponent(item.name)
         try? FileManager.default.removeItem(at: fileURL)
-        try data.write(to: fileURL)
+        do {
+            try FileManager.default.moveItem(at: tempURL, to: fileURL)
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw error
+        }
         return fileURL
+    }
+
+    /// Supprime les fichiers téléchargés pour partage (réinitialisation).
+    static func clearDownloads() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Downloads", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
     }
 }
 

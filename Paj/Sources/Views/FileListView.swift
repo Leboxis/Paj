@@ -22,9 +22,11 @@ struct FileListView: View {
     @ObservedObject private var videoStore = VideoMetadataStore.shared
 
     @State private var searchQuery = ""
+    @State private var searchDebounceTask: Task<Void, Never>?
     @State private var selectedOrientation: VideoOrientation?
     @State private var viewerShown = false
     @State private var viewerIndex = 0
+    @State private var viewerItems: [FileItem] = []
     @State private var infoItem: FileItem?
     @State private var textItem: FileItem?
     @State private var renamingItem: FileItem?
@@ -79,8 +81,11 @@ struct FileListView: View {
 
         if sortField == SortField.duration.rawValue {
             items.sort { a, b in
-                let durA = videoStore.duration(for: a.id) ?? (a.isVideo ? Double(a.size ?? 0) : -1)
-                let durB = videoStore.duration(for: b.id) ?? (b.isVideo ? Double(b.size ?? 0) : -1)
+                // Durée connue → secondes ; vidéo sans durée connue → tout à
+                // la fin (+∞) ; non-vidéo → tout au début (-∞). On ne mélange
+                // plus octets et secondes comme clés de tri.
+                let durA = videoStore.duration(for: a.id) ?? (a.isVideo ? Double.infinity : -Double.infinity)
+                let durB = videoStore.duration(for: b.id) ?? (b.isVideo ? Double.infinity : -Double.infinity)
                 return sortAscending ? (durA < durB) : (durA > durB)
             }
         }
@@ -100,6 +105,7 @@ struct FileListView: View {
             .modifier(FileSheetsModifier(
                 viewerShown: $viewerShown,
                 viewerIndex: $viewerIndex,
+                viewerItems: $viewerItems,
                 infoItem: $infoItem,
                 textItem: $textItem,
                 moveTargets: $moveTargets,
@@ -152,23 +158,30 @@ struct FileListView: View {
 
 
     private func handleSearchChange(_ query: String) {
+        searchDebounceTask?.cancel()
         let words = query.components(separatedBy: .whitespacesAndNewlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        if words.isEmpty {
-            reloadForSort()
-        } else {
-            let filterBlock: (FileItem) -> Bool = { item in
-                words.allSatisfy { word in
-                    item.name.localizedCaseInsensitiveContains(word)
-                }
+        searchDebounceTask = Task {
+            // Debounce : une seule requête serveur quand l'utilisateur arrête
+            // de taper, au lieu d'une par frappe.
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            if words.isEmpty {
+                reloadForSort()
+            } else {
+                let queryParam = words.joined(separator: " ")
+                model.setLoaderAndReload({ cursor in
+                    try await KDriveClient.shared.searchFiles(query: queryParam, cursor: cursor)
+                })
             }
-            let queryParam = words.joined(separator: " ")
-            model.setLoaderAndReload({ cursor in
-                try await KDriveClient.shared.searchFiles(query: queryParam, cursor: cursor)
-            }, filter: filterBlock)
         }
     }
 
     private func reloadForSort() {
+        // Pendant une recherche active, changer le tri ne doit pas remplacer
+        // les résultats serveur par le contenu du dossier : on ignore le tri
+        // jusqu'à ce que la recherche soit vidée (reloadForSort est alors
+        // rappelé et réapplique le tri choisi).
+        guard searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         if sortField == SortField.duration.rawValue {
             model.setLoaderAndReload(makeLoader("original", sortAscending))
         } else {
@@ -396,7 +409,10 @@ struct FileListView: View {
                 infoItem = item
             }
         } else if item.isMedia {
+            // Même liste (filtrée/triée) que celle affichée et passée à la
+            // visionneuse : l'index désigne bien l'élément tapé.
             let media = displayedItems.filter { $0.isMedia }
+            viewerItems = media
             viewerIndex = media.firstIndex(where: { $0.id == item.id }) ?? 0
             viewerShown = true
         } else if item.isTextFile {
@@ -504,6 +520,7 @@ struct FileListView: View {
 private struct FileSheetsModifier: ViewModifier {
     @Binding var viewerShown: Bool
     @Binding var viewerIndex: Int
+    @Binding var viewerItems: [FileItem]
     @Binding var infoItem: FileItem?
     @Binding var textItem: FileItem?
     @Binding var moveTargets: [FileItem]
@@ -518,7 +535,7 @@ private struct FileSheetsModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .fullScreenCover(isPresented: $viewerShown) {
-                MediaViewerView(items: model.items.filter { $0.isMedia }, index: $viewerIndex)
+                MediaViewerView(items: viewerItems, index: $viewerIndex)
             }
             .sheet(item: $infoItem) { FileInfoSheet(item: $0) }
             .sheet(item: $textItem) { TextFileView(item: $0) }
@@ -552,20 +569,15 @@ private struct FileSheetsModifier: ViewModifier {
                 DocumentPicker(onPick: { urls in
                     showingFileImporter = false
                     guard !urls.isEmpty else { return }
-                    var filesToUpload: [(name: String, data: Data)] = []
-                    for url in urls {
-                        if let data = try? Data(contentsOf: url) {
-                            filesToUpload.append((url.lastPathComponent, data))
-                        }
-                        try? FileManager.default.removeItem(at: url)
-                    }
-                    if !filesToUpload.isEmpty {
-                        let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
-                        isImporting = true
-                        Task { @MainActor in
-                            await model.uploadMultipleFiles(filesToUpload, directoryId: dirId)
-                            isImporting = false
-                        }
+                    // Le picker (asCopy: true) a déjà copié les fichiers en
+                    // sandbox : upload streamé depuis ces URL, sans les lire
+                    // en mémoire ni bloquer le thread principal.
+                    let filesToUpload = urls.map { (name: $0.lastPathComponent, url: $0) }
+                    let dirId = currentDirectoryId ?? AppConfig.rootDirectoryId
+                    isImporting = true
+                    Task { @MainActor in
+                        await model.uploadMultipleFiles(filesToUpload, directoryId: dirId)
+                        isImporting = false
                     }
                 }, onCancel: {
                     showingFileImporter = false
@@ -661,7 +673,7 @@ private struct FilePhotosImporterModifier: ViewModifier {
                 guard !items.isEmpty else { return }
                 isImporting = true
                 Task { @MainActor in
-                    var files: [(name: String, data: Data)] = []
+                    var files: [(name: String, url: URL)] = []
                     for item in items {
                         do {
                             if let media = try await MediaLoader.loadMedia(from: item) {

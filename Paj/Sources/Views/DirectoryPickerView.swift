@@ -53,26 +53,29 @@ private struct PickerDirectoryList: View {
         self.onPick = onPick
         self.onCancel = onCancel
         let dirId = directory.id
-        let initialModel = FileListModel { cursor in
-            try await KDriveClient.shared.listDirectory(
-                id: dirId,
-                cursor: cursor,
-                orderBy: "name",
-                order: "asc"
-            )
-        }
-        initialModel.setLoaderAndReload({ cursor in
-            try await KDriveClient.shared.listDirectory(
-                id: dirId,
-                cursor: cursor,
-                orderBy: "name",
-                order: "asc"
-            )
-        }, filter: { $0.isDirectory })
-        _model = StateObject(wrappedValue: initialModel)
+        // Filtrage « dossiers uniquement » posé à l'init SANS lancer de
+        // chargement : le premier fetch est déclenché par le .task de la vue.
+        // (Un setLoaderAndReload ici relancerait une requête réseau à chaque
+        // ré-init de la vue, pour des modèles jetés par SwiftUI.)
+        _model = StateObject(wrappedValue: FileListModel(
+            loader: { cursor in
+                try await KDriveClient.shared.listDirectory(
+                    id: dirId,
+                    cursor: cursor,
+                    orderBy: "name",
+                    order: "asc"
+                )
+            },
+            filter: { $0.isDirectory }
+        ))
     }
 
     var body: some View {
+        // Ceinture et bretelles : la navigation empêche déjà d'entrer dans un
+        // dossier déplacé (lignes désactivées) ; si un ancêtre du dossier
+        // courant est malgré tout un élément déplacé, la destination serait
+        // un descendant de lui-même → « Choisir ici » désactivé.
+        let destinationInsideMovedFolder = path.contains { excludedIds.contains($0.id) }
         List {
             if model.items.isEmpty && !model.isLoading {
                 VStack(spacing: 12) {
@@ -146,6 +149,7 @@ private struct PickerDirectoryList: View {
                     onPick(directory.id)
                 }
                 .bold()
+                .disabled(destinationInsideMovedFolder)
             }
         }
         .task { await model.loadFirstPageIfNeeded() }

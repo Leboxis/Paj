@@ -17,9 +17,15 @@ final class FileListModel: ObservableObject {
     private var loader: (String?) async throws -> Page<FileItem>
     private var filterPredicate: ((FileItem) -> Bool)?
     private var loadTask: Task<Void, Never>?
+    /// Génération du chargement en cours : seule la tâche la plus récente
+    /// a le droit de modifier `isLoading` (une tâche annulée qui se termine
+    /// ne doit pas réouvrir la porte à un double chargement).
+    private var loadGeneration = 0
 
-    init(loader: @escaping (String?) async throws -> Page<FileItem>) {
+    init(loader: @escaping (String?) async throws -> Page<FileItem>,
+         filter: ((FileItem) -> Bool)? = nil) {
         self.loader = loader
+        self.filterPredicate = filter
     }
 
     var canLoadMore: Bool { hasMore && !isLoading }
@@ -36,8 +42,17 @@ final class FileListModel: ObservableObject {
         await loadMore()
     }
 
+    /// Recharge seulement si la liste a déjà été chargée une fois : utilisé
+    /// au retour sur un onglet (re-sélection) pour resynchroniser sans
+    /// doubler le premier chargement (fait par .task → loadFirstPageIfNeeded).
+    func refreshIfLoaded() async {
+        guard !items.isEmpty else { return }
+        await refresh()
+    }
+
     func refresh() async {
         loadTask?.cancel()
+        loadGeneration += 1
         isLoading = false
         cursor = nil
         hasMore = true
@@ -49,16 +64,18 @@ final class FileListModel: ObservableObject {
     func loadMore() async {
         guard !isLoading else { return }
         isLoading = true
+        loadGeneration += 1
+        let generation = loadGeneration
         loadTask = Task {
-            await performLoad()
+            await performLoad(generation: generation)
         }
     }
 
-    private func performLoad(depth: Int = 0) async {
-        defer { if depth == 0 { isLoading = false } }
+    private func performLoad(generation: Int, depth: Int = 0) async {
+        defer { if depth == 0 && generation == loadGeneration { isLoading = false } }
         do {
             let page = try await loader(cursor)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == loadGeneration else { return }
             var incoming = page.data ?? []
             if let filter = filterPredicate {
                 incoming = incoming.filter(filter)
@@ -73,12 +90,12 @@ final class FileListModel: ObservableObject {
 
             // Si le filtre a éliminé des éléments et qu'on a moins de 10 éléments affichés alors qu'il reste des pages, on continue le chargement
             if items.count < 10 && hasMore && !(page.data ?? []).isEmpty && depth < 5 {
-                await performLoad(depth: depth + 1)
+                await performLoad(generation: generation, depth: depth + 1)
             }
         } catch is CancellationError {
             return
         } catch {
-            if !Task.isCancelled {
+            if !Task.isCancelled && generation == loadGeneration {
                 errorMessage = error.localizedDescription
             }
         }
@@ -95,13 +112,16 @@ final class FileListModel: ObservableObject {
 
     // MARK: - Mutations serveur
 
-    /// Favori piloté par le serveur : appel API puis resynchronisation de la
-    /// liste — aucun état local de favori dans l'app.
+    /// Favori piloté par le serveur : appel API puis mise à jour de
+    /// l'élément en place — pas de refresh complet, la position de
+    /// défilement et le reste de la liste restent intacts.
     func toggleFavorite(_ item: FileItem) async {
         let favorite = !(item.isFavorite ?? false)
         do {
             try await KDriveClient.shared.setFavorite(item, favorite: favorite)
-            await refresh()
+            if let idx = items.firstIndex(where: { $0.id == item.id }) {
+                items[idx].isFavorite = favorite
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -140,25 +160,34 @@ final class FileListModel: ObservableObject {
         isBatching = true
         defer { isBatching = false }
         do {
-            _ = try await KDriveClient.shared.uploadFile(name: name, data: data, directoryId: directoryId)
+            // Écrit en fichier temporaire pour rester en upload streamé
+            // (jamais de contenu entier en mémoire).
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString + "_" + name)
+            try data.write(to: url, options: .atomic)
+            defer { try? FileManager.default.removeItem(at: url) }
+            _ = try await KDriveClient.shared.uploadFile(name: name, fileURL: url, directoryId: directoryId)
             await refresh()
         } catch {
             errorMessage = "Échec du téléversement : \(error.localizedDescription)"
         }
     }
 
-    func uploadMultipleFiles(_ files: [(name: String, data: Data)], directoryId: Int) async {
+    func uploadMultipleFiles(_ files: [(name: String, url: URL)], directoryId: Int) async {
         guard !files.isEmpty else { return }
         isBatching = true
         var failures = 0
         var lastError: String?
         for file in files {
             do {
-                _ = try await KDriveClient.shared.uploadFile(name: file.name, data: file.data, directoryId: directoryId)
+                _ = try await KDriveClient.shared.uploadFile(name: file.name, fileURL: file.url, directoryId: directoryId)
             } catch {
                 failures += 1
                 lastError = error.localizedDescription
             }
+            // Fichier temporaire (copie picker/Photos ou fallback Data) :
+            // supprimé dans tous les cas après tentative.
+            try? FileManager.default.removeItem(at: file.url)
         }
         isBatching = false
         if failures > 0 {

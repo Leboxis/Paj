@@ -26,11 +26,6 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: appState.isLocked)
         .animation(.easeInOut(duration: 0.2), value: appState.isConfigured)
-        .onChange(of: appState.isLocked) { _, isLocked in
-            if !isLocked {
-                selectedTab = .home
-            }
-        }
     }
 }
 
@@ -70,9 +65,6 @@ struct MainTabView: View {
                 .tag(MainTab.profile)
         }
         .tint(.accentColor)
-        .onAppear {
-            selectedTab = .home
-        }
         .task {
             await CategoryStore.shared.loadIfNeeded()
         }

@@ -8,13 +8,27 @@ final class CategoryStore: ObservableObject {
 
     @Published private(set) var categories: [KCategory] = []
     private var loaded = false
+    private var inFlight: Task<Void, Never>?
 
+    /// `loaded` n'est marqué vrai qu'en cas de succès : un échec réseau
+    /// (token expiré, hors-ligne) sera retenté au prochain appel au lieu de
+    /// laisser les pastilles de tags grises pour toute la session.
     func loadIfNeeded(force: Bool = false) async {
-        guard !loaded || force else { return }
-        loaded = true
-        if let list = try? await KDriveClient.shared.listCategories() {
-            categories = list
+        if !force, let task = inFlight {
+            await task.value
+            return
         }
+        guard !loaded || force else { return }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            if let list = try? await KDriveClient.shared.listCategories() {
+                self.categories = list
+                self.loaded = true
+            }
+        }
+        inFlight = task
+        await task.value
+        inFlight = nil
     }
 
     func category(withID id: Int) -> KCategory? {

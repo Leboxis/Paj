@@ -90,6 +90,11 @@ struct SettingsView: View {
             .alert("Réinitialiser la configuration ?", isPresented: $showReset) {
                 Button("Réinitialiser", role: .destructive) {
                     AppConfig.reset()
+                    // Purge des caches locaux : miniatures/apercus (photos en
+                    // clair sur disque), métadonnées vidéos, téléchargements.
+                    ThumbnailStore.shared.clearAll()
+                    VideoMetadataStore.shared.clear()
+                    FileDownloadHelper.clearDownloads()
                     appState.refreshConfig()
                 }
                 Button("Annuler", role: .cancel) {}

@@ -13,6 +13,7 @@ struct MediaViewerView: View {
     @State private var shareUrl: URL?
     @State private var isSharing = false
     @State private var showCopiedBanner = false
+    @State private var errorMessage: String?
 
     private var currentItem: FileItem? {
         guard items.indices.contains(index) else { return nil }
@@ -118,6 +119,12 @@ struct MediaViewerView: View {
                 ShareSheet(activityItems: [url])
             }
         }
+        .alert("Erreur", isPresented: Binding(get: { errorMessage != nil },
+                                              set: { if !$0 { errorMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func prepareAndShare() {
@@ -128,9 +135,9 @@ struct MediaViewerView: View {
                 let localURL = try await FileDownloadHelper.downloadAndPrepareLocalURL(item: item)
                 shareUrl = localURL
             } catch {
-                if let url = try? await KDriveClient.shared.temporaryUrl(for: item) {
-                    shareUrl = url
-                }
+                // Pas de repli sur l'URL temporaire signée : elle expire au
+                // bout d'une heure et le destinataire perdrait l'accès.
+                errorMessage = "Échec du partage : \(error.localizedDescription)"
             }
             isSharing = false
         }

@@ -202,8 +202,28 @@ final class KDriveClient {
     }
 
     /// Téléversement d'un nouveau fichier (photo, vidéo, document) dans un dossier.
+    /// Streamé depuis le disque via URLSession (aucun chargement complet en
+    /// mémoire : les vidéos volumineuses ne font pas planter l'app).
     @discardableResult
-    func uploadFile(name: String, data: Data, directoryId: Int) async throws -> FileItem {
+    func uploadFile(name: String, fileURL: URL, directoryId: Int) async throws -> FileItem {
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.intValue ?? 0
+        var req = try request(path: "3/drive/\(AppConfig.driveId)/upload", query: [
+            URLQueryItem(name: "directory_id", value: String(directoryId)),
+            URLQueryItem(name: "file_name", value: name),
+            URLQueryItem(name: "total_size", value: String(fileSize)),
+            URLQueryItem(name: "conflict", value: "rename"),
+            URLQueryItem(name: "with", value: "categories,is_favorite")
+        ])
+        req.httpMethod = "POST"
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await session.upload(for: req, fromFile: fileURL)
+        try Self.check(response: response, data: data)
+        return Self.decodeUploadResponse(data, fallbackName: name, size: fileSize)
+    }
+
+    /// Interprète la réponse du téléversement : `{"data": {FileV3}}`, ou une
+    /// forme simplifiée `{id, name, type}`, ou rien d'exploitable (fichier synthétique).
+    private static func decodeUploadResponse(_ data: Data, fallbackName: String, size: Int) -> FileItem {
         struct Resp: Decodable { let data: FileItem? }
         struct SimpleResp: Decodable {
             struct SimpleData: Decodable {
@@ -213,24 +233,22 @@ final class KDriveClient {
             }
             let data: SimpleData?
         }
-        var req = try request(path: "3/drive/\(AppConfig.driveId)/upload", query: [
-            URLQueryItem(name: "directory_id", value: String(directoryId)),
-            URLQueryItem(name: "file_name", value: name),
-            URLQueryItem(name: "total_size", value: String(data.count)),
-            URLQueryItem(name: "conflict", value: "rename"),
-            URLQueryItem(name: "with", value: "categories,is_favorite")
-        ])
-        req.httpMethod = "POST"
-        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        req.httpBody = data
-        let resData = try await perform(req)
-        if let item = (try? JSONDecoder().decode(Resp.self, from: resData))?.data {
+        if let item = (try? JSONDecoder().decode(Resp.self, from: data))?.data {
             return item
         }
-        if let simple = (try? JSONDecoder().decode(SimpleResp.self, from: resData))?.data, let id = simple.id {
-            return FileItem(id: id, name: simple.name ?? name, type: simple.type ?? "file", size: data.count, mimeType: nil, extensionType: nil, createdAt: nil, lastModifiedAt: nil, addedAt: nil, isFavorite: nil, categories: nil, color: nil, deletedAt: nil)
+        if let simple = (try? JSONDecoder().decode(SimpleResp.self, from: data))?.data, let id = simple.id {
+            return FileItem(id: id, name: simple.name ?? fallbackName, type: simple.type ?? "file", size: size, mimeType: nil, extensionType: nil, createdAt: nil, lastModifiedAt: nil, addedAt: nil, isFavorite: nil, categories: nil, color: nil, deletedAt: nil)
         }
-        return FileItem(id: 0, name: name, type: "file", size: data.count, mimeType: nil, extensionType: nil, createdAt: nil, lastModifiedAt: nil, addedAt: nil, isFavorite: nil, categories: nil, color: nil, deletedAt: nil)
+        return FileItem(id: 0, name: fallbackName, type: "file", size: size, mimeType: nil, extensionType: nil, createdAt: nil, lastModifiedAt: nil, addedAt: nil, isFavorite: nil, categories: nil, color: nil, deletedAt: nil)
+    }
+
+    private static func check(response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else {
+            throw KDriveError.http(0, "Pas de réponse HTTP")
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw KDriveError.http(http.statusCode, Self.errorDescription(data))
+        }
     }
 
 
@@ -274,6 +292,24 @@ final class KDriveClient {
     func downloadData(fileId: Int) async throws -> Data {
         let req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(fileId)/download")
         return try await perform(req)
+    }
+
+    /// Télécharge un fichier vers une URL temporaire gérée par URLSession
+    /// (streaming disque : aucune limite de taille en mémoire). L'appelant
+    /// déplace ou supprime ce fichier temporaire ensuite.
+    func downloadFileToTemporary(fileId: Int) async throws -> URL {
+        let req = try request(path: "2/drive/\(AppConfig.driveId)/files/\(fileId)/download")
+        let (url, response) = try await session.download(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            try? FileManager.default.removeItem(at: url)
+            throw KDriveError.http(0, "Pas de réponse HTTP")
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let body = (try? Data(contentsOf: url)) ?? Data()
+            try? FileManager.default.removeItem(at: url)
+            throw KDriveError.http(http.statusCode, Self.errorDescription(body))
+        }
+        return url
     }
 
     /// Enregistre le nouveau contenu d'un fichier existant :

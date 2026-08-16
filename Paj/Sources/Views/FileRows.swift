@@ -76,7 +76,9 @@ struct FileRow: View {
     var body: some View {
         HStack(spacing: 12) {
             if item.isMedia {
-                RemoteThumbnail(file: item, width: 96, height: 96, corner: 6)
+                // 44 pt × @3x = 132 px : taille exacte demandée au serveur
+                // (sous-échantillonnage côté kdrive, image nette à l'écran).
+                RemoteThumbnail(file: item, width: 132, height: 132, corner: 6)
                     .frame(width: 44, height: 44)
             } else {
                 RoundedRectangle(cornerRadius: 6)

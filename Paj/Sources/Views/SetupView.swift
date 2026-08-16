@@ -81,6 +81,14 @@ struct SetupView: View {
         let accessCode = accessCode
         let rootId = rootIdText.isEmpty ? "5" : rootIdText
 
+        // Sécurité : si le test échoue (ex. faute de frappe dans le token),
+        // l'ancienne configuration est restaurée — une config invalide ne
+        // doit jamais rester persistée dans le trousseau.
+        let previousToken = AppConfig.token
+        let previousDriveId = AppConfig.driveId > 0 ? String(AppConfig.driveId) : ""
+        let previousAccessCode = AppConfig.accessCode
+        let previousRootId = String(AppConfig.rootDirectoryId)
+
         Task { @MainActor in
             AppConfig.save(token: token, driveId: driveId, accessCode: accessCode, rootId: rootId)
             do {
@@ -94,6 +102,9 @@ struct SetupView: View {
                     appState.unlock()
                 }
             } catch {
+                AppConfig.save(token: previousToken, driveId: previousDriveId,
+                               accessCode: previousAccessCode, rootId: previousRootId)
+                appState.refreshConfig()
                 errorMessage = "Connexion impossible : \(error.localizedDescription)"
             }
             testing = false

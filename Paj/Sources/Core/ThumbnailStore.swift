@@ -18,6 +18,10 @@ final class ThumbnailStore {
 
     private var inFlight: [String: Task<UIImage?, Never>] = [:]
     private var lastTrimDate = Date.distantPast
+    /// Cache négatif court : clés dont le fetch a échoué récemment, pour ne
+    /// pas re-bombarder le serveur à chaque réapparition de la cellule.
+    private var failedFetches: [String: Date] = [:]
+    private let negativeCacheTTL: TimeInterval = 60
 
     private init() {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -42,6 +46,10 @@ final class ThumbnailStore {
         var started: Task<UIImage?, Never>?
 
         syncQueue.sync {
+            // Échec récent : on retourne nil tout de suite, sans réseau.
+            if let failedAt = failedFetches[key], Date().timeIntervalSince(failedAt) < negativeCacheTTL {
+                return
+            }
             if let task = inFlight[key] {
                 existing = task
             } else {
@@ -78,10 +86,15 @@ final class ThumbnailStore {
             return cached
         }
 
-        guard let data = try? await fetch(), !data.isEmpty else { return nil }
-        guard let image = await Task.detached(priority: .utility, operation: { UIImage(data: data) }).value else {
+        guard let data = try? await fetch(), !data.isEmpty else {
+            markFailed(key)
             return nil
         }
+        guard let image = await Task.detached(priority: .utility, operation: { UIImage(data: data) }).value else {
+            markFailed(key)
+            return nil
+        }
+        clearFailed(key)
         memory.setObject(image, forKey: key as NSString, cost: Self.pixelCost(of: image))
 
         let dir = diskDir
@@ -102,6 +115,15 @@ final class ThumbnailStore {
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: diskDir)
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)
+        syncQueue.sync { failedFetches.removeAll() }
+    }
+
+    private func markFailed(_ key: String) {
+        syncQueue.sync { failedFetches[key] = Date() }
+    }
+
+    private func clearFailed(_ key: String) {
+        syncQueue.sync { failedFetches[key] = nil }
     }
 
     func formattedSize() -> String {

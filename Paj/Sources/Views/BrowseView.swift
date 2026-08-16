@@ -79,5 +79,11 @@ struct FavoritesView: View {
                 DirectoryView(directory: directory, path: $path)
             }
         }
+        // Avec la TabView native, onAppear se redéclenche à chaque sélection
+        // de l'onglet : la liste des favoris (qui change via les menus
+        // contextuels d'autres écrans) se resynchronise alors automatiquement.
+        .onAppear {
+            Task { await model.refreshIfLoaded() }
+        }
     }
 }

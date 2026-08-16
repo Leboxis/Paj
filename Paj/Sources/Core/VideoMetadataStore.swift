@@ -55,6 +55,15 @@ final class VideoMetadataStore: ObservableObject {
         orientations[fileId]
     }
 
+    /// Purge complète (réinitialisation de la config) : métadonnées en
+    /// mémoire et fichier de cache sur disque.
+    func clear() {
+        durations.removeAll()
+        orientations.removeAll()
+        inFlight.removeAll()
+        try? FileManager.default.removeItem(at: cacheURL)
+    }
+
     func register(fileId: Int, imageWidth: CGFloat, imageHeight: CGFloat) {
         guard orientations[fileId] == nil else { return }
         let ratio = imageWidth / max(imageHeight, 1)
