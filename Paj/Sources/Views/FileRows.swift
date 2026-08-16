@@ -1,3 +1,7 @@
+import SwiftUI
+import UIKit
+import AVKit
+
 // MARK: - Icônes SF Symbols et Couleurs Orvian par type
 
 extension FileItem {
